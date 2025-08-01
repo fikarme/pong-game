@@ -32,33 +32,40 @@ class Router {
   }
 
   private async loadPage(pageName: string) {
+    let loadingTimeout: number | null = null;
+    let loadingShown = false;
     try {
       console.log(`Loading page: ${pageName}`);
-      
       // Sayfa değişikliğini güncelle
       this.currentPage = pageName;
-      
-      // Loading mesajı göster
-      this.container.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-xl">Loading...</div></div>';
-      
+
+      // Only show Loading... if new page hasn't loaded after 3s
+      loadingTimeout = window.setTimeout(() => {
+        loadingShown = true;
+        this.container.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-xl">Loading...</div></div>';
+      }, 3000);
+
       // HTML dosyasını yükle
       const response = await fetch(`./pages/${pageName}/${pageName}.html`);
       console.log(`Fetch response for ${pageName}:`, response.status);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const html = await response.text();
       console.log(`HTML loaded for ${pageName}, length:`, html.length);
-      
+
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+      }
       // Container'a yerleştir
       this.container.innerHTML = html;
-      
+
       // TS dosyasını yükle ve çalıştır
       const module = await import(`../pages/${pageName}/${pageName}.js`);
       console.log(`Module loaded for ${pageName}:`, module);
-      
+
       if (module.init) {
         module.init();
       }

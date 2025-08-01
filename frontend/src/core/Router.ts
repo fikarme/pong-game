@@ -13,7 +13,7 @@ export class Router {
 
   constructor(container: HTMLElement) {
     this.container = container;
-    
+
     // Listen for custom navigation events
     window.addEventListener('navigate', (e: Event) => {
       const customEvent = e as CustomEvent;
@@ -45,20 +45,20 @@ export class Router {
   go(path: string): void {
     if (this.routes.has(path)) {
       const route = this.routes.get(path)!;
-      
+
       // Check authentication
       if (route.requiresAuth && !this.isAuthenticated()) {
         // Redirect to login if not authenticated
         this.go('/login');
         return;
       }
-      
+
       // If user is authenticated and trying to access login/register, redirect to home
       if ((path === '/login' || path === '/register') && this.isAuthenticated()) {
         this.go('/');
         return;
       }
-      
+
       this.currentRoute = path;
       this.render();
       // State-based routing: URL sabit kalır, sadece browser history'de state tutarız
@@ -82,13 +82,29 @@ export class Router {
     return !!localStorage.getItem('authToken');
   }
 
-  // Render
+  // Render with delayed loading indicator
   private render(): void {
     const route = this.routes.get(this.currentRoute);
-    if (route) {
+    if (!route) return;
+
+    // Keep current content visible
+    let loadingTimeout: number | null = null;
+    let loadingShown = false;
+
+    // After 1s, if new page not ready, show loading
+    loadingTimeout = window.setTimeout(() => {
+      loadingShown = true;
+      this.container.innerHTML = '<div class="flex items-center justify-center h-screen"><span class="text-lg text-gray-500">Loading...</span></div>';
+    }, 1000);
+
+    // Render the new page/component (may be async)
+    Promise.resolve(route.component()).then((el) => {
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+      }
       this.container.innerHTML = '';
-      this.container.appendChild(route.component());
-    }
+      this.container.appendChild(el);
+    });
   }
 
   // Başlat
@@ -96,11 +112,11 @@ export class Router {
     // İlk yüklemede mevcut state'i kontrol et
     const currentState = window.history.state;
     let initialRoute = '/';
-    
+
     if (currentState && currentState.route) {
       initialRoute = currentState.route;
     }
-    
+
     // Authentication kontrolü
     if (!this.isAuthenticated() && initialRoute !== '/login' && initialRoute !== '/register') {
       this.go('/login');
