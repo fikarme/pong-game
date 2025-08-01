@@ -2,7 +2,7 @@ import { getApiUrl, API_CONFIG } from '../../config.js';
 
 export async function init() {
   console.log('Profile page loaded');
-  
+
   const authToken = localStorage.getItem('authToken');
   if (!authToken) {
     alert('Please login first!');
@@ -40,7 +40,7 @@ export async function init() {
 
     const freshUserData = await response.json();
     console.log('Fresh user data from API:', freshUserData);
-    
+
     if (!storedUser || JSON.stringify(freshUserData) !== storedUser) {
       localStorage.setItem('user', JSON.stringify(freshUserData));
       updateProfileUI(freshUserData);
@@ -48,7 +48,7 @@ export async function init() {
     } else {
       console.log('Data unchanged, no UI update needed');
     }
-    
+
   } catch (error) {
     console.error('Error fetching user data:', error);
     alert('Error loading profile data');
@@ -67,7 +67,7 @@ function handleLogout() {
 
 function updateProfileUI(userData: any) {
   console.log('Updating UI with user data:', userData);
-  
+
   const user = userData.user || userData;
   console.log('Actual user object:', user);
 
