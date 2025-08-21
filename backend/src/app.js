@@ -12,6 +12,7 @@ import twoFARoutes from './modules/2fa/routes/2fa.routes.js';
 import friendRoutes from './modules/friend/routes/friend.routes.js';
 import userRoutes from './modules/user/routes/user.routes.js';
 import chatRoutes from './modules/chat/routes/chat.routes.js';
+import tournamentRoutes from './modules/tournament/routes/tournament.routes.js';
 import { websocketHandler } from './websocket/websocket.handler.js';
 import metricsPlugin, { metrics } from './plugins/metrics.js';
 import path from 'path';
@@ -81,6 +82,7 @@ await app.register(twoFARoutes, { prefix: '/2fa' });
 await app.register(friendRoutes, { prefix: '/friends' });
 await app.register(userRoutes, { prefix: '/users' });
 await app.register(chatRoutes, { prefix: '/chat' });
+await app.register(tournamentRoutes, { prefix: '/api' });
 app.get('/ws', { websocket: true }, websocketHandler);
 
 

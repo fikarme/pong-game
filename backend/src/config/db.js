@@ -78,5 +78,56 @@ export const initDB = async () => {
       FOREIGN KEY (winnerId) REFERENCES users(id) ON DELETE SET NULL
     )`);
 
+  // Create tournaments table
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS tournaments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      max_participants INTEGER DEFAULT 8,
+      status TEXT DEFAULT 'registration',
+      prize TEXT,
+      start_date DATETIME,
+      end_date DATETIME,
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    )
+  `);
+
+  // Create tournament_participants table
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS tournament_participants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER,
+      user_id INTEGER,
+      registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      placement INTEGER,
+      UNIQUE(tournament_id, user_id),
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Create tournament_matches table
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS tournament_matches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER,
+      round INTEGER,
+      player1_id INTEGER,
+      player2_id INTEGER,
+      winner_id INTEGER,
+      player1_score INTEGER DEFAULT 0,
+      player2_score INTEGER DEFAULT 0,
+      match_data TEXT,
+      played_at DATETIME,
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+      FOREIGN KEY (player1_id) REFERENCES users(id),
+      FOREIGN KEY (player2_id) REFERENCES users(id),
+      FOREIGN KEY (winner_id) REFERENCES users(id)
+    )
+  `);
+
   return db;
 };
