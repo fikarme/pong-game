@@ -1,29 +1,65 @@
 <div class="h-screen bg-black flex flex-col items-center justify-center">
+  <!-- Game Header -->
   <div class="text-white text-center mb-4">
     <h1 class="text-3xl font-bold mb-2">PONG</h1>
-    <div class="text-xl">
-      <span id="player1Score">0</span> - <span id="player2Score">0</span>
+    <div class="text-xl flex justify-center items-center space-x-8">
+      <div class="text-center">
+        <div id="leftPlayer" class="text-sm text-gray-300">Player 1</div>
+        <div id="leftScore" class="text-2xl font-bold">0</div>
+      </div>
+      <div class="text-gray-500">VS</div>
+      <div class="text-center">
+        <div id="rightPlayer" class="text-sm text-gray-300">Player 2</div>
+        <div id="rightScore" class="text-2xl font-bold">0</div>
+      </div>
+    </div>
+    <div id="gameStatus" class="text-sm text-gray-400 mt-2">Waiting to connect...</div>
+  </div>
+  
+  <!-- Game Canvas -->
+  <div class="relative">
+    <canvas id="pongCanvas" class="border-2 border-white" width="800" height="400"></canvas>
+    
+    <!-- Game Message Overlay -->
+    <div id="gameMessage" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white text-center text-lg font-semibold rounded hidden">
+      <!-- Messages will appear here -->
     </div>
   </div>
   
-  <canvas id="pongCanvas" class="border-2 border-white" width="800" height="400"></canvas>
-  
-  <div class="mt-6 space-x-4">
-    <button id="startBtn" class="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600">
-      Start
+  <!-- Game Controls -->
+  <div id="gameControls" class="mt-6 space-x-4">
+    <button id="startBtn" class="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600 transition-colors">
+      Start Game
     </button>
-    <button id="pauseBtn" class="bg-yellow-500 text-white px-6 py-2 rounded hover:bg-yellow-600">
+    <button id="pauseBtn" class="bg-yellow-500 text-white px-6 py-2 rounded hover:bg-yellow-600 transition-colors">
       Pause
     </button>
-    <button id="resetBtn" class="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600">
-      Reset
+    <button id="resetBtn" class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition-colors">
+      New Game
     </button>
-    <button onclick="router.navigate('landing')" class="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600">
+    <button id="leaveBtn" class="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600 transition-colors">
+      Leave
+    </button>
+    <button onclick="router.navigate('tournament')" class="bg-purple-500 text-white px-6 py-2 rounded hover:bg-purple-600 transition-colors">
+      Tournaments
+    </button>
+    <button onclick="router.navigate('landing')" class="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600 transition-colors">
       Home
     </button>
   </div>
   
-  <div class="text-white text-sm mt-4">
-    W/S - Player 1 | ↑/↓ - Player 2
+  <!-- Game Instructions -->
+  <div class="text-white text-sm mt-4 text-center">
+    <div class="mb-2">
+      <strong>Controls:</strong> Use W/S or ↑/↓ arrow keys to move your paddle
+    </div>
+    <div class="text-gray-400 text-xs">
+      Real-time multiplayer • Connect with friends • Join tournaments
+    </div>
+  </div>
+  
+  <!-- Connection Status -->
+  <div id="connectionStatus" class="mt-2 text-xs text-gray-500 text-center">
+    WebSocket: Connecting...
   </div>
 </div>
