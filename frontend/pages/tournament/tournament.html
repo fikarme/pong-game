@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOURNAMENT BRACKET - PONG ARENA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="tournament.css">
+</head>
+<body>
+    <div class="tournament-container">
+        <!-- Header -->
+        <div class="tournament-header">
+            <div class="header-grid">
+                <div class="grid-line"></div>
+                <div class="grid-line"></div>
+                <div class="grid-line"></div>
+            </div>
+            <h1 class="tournament-title">
+                <span class="title-bracket">[</span>
+                TOURNAMENT BRACKET
+                <span class="title-bracket">]</span>
+            </h1>
+            <div class="tournament-status">
+                <span class="status-indicator">●</span>
+                <span class="status-text">ACTIVE</span>
+                <span class="tournament-id">ID: 2025-TRN-001</span>
+            </div>
+        </div>
+
+        <!-- Tournament Bracket -->
+        <div class="bracket-container">
+            <!-- Round 1 - Quarter Finals -->
+            <div class="bracket-round" data-round="1">
+                <div class="round-header">
+                    <span class="round-label">ROUND_01</span>
+                    <span class="round-name">QUARTER_FINALS</span>
+                </div>
+                <div class="matches">
+                    <div class="match" data-match="1">
+                        <div class="player player-1 winner">
+                            <span class="player-name">CYBER_KNIGHT</span>
+                            <span class="player-score">15</span>
+                        </div>
+                        <div class="vs-connector">VS</div>
+                        <div class="player player-2">
+                            <span class="player-name">NEON_GHOST</span>
+                            <span class="player-score">12</span>
+                        </div>
+                        <div class="match-status completed">COMPLETED</div>
+                    </div>
+
+                    <div class="match" data-match="2">
+                        <div class="player player-1 winner">
+                            <span class="player-name">PIXEL_WARRIOR</span>
+                            <span class="player-score">15</span>
+                        </div>
+                        <div class="vs-connector">VS</div>
+                        <div class="player player-2">
+                            <span class="player-name">MATRIX_BLADE</span>
+                            <span class="player-score">9</span>
+                        </div>
+                        <div class="match-status completed">COMPLETED</div>
+                    </div>
+
+                    <div class="match" data-match="3">
+                        <div class="player player-1">
+                            <span class="player-name">SYNTHWAVE_ACE</span>
+                            <span class="player-score">--</span>
+                        </div>
+                        <div class="vs-connector">VS</div>
+                        <div class="player player-2">
+                            <span class="player-name">RETRO_FURY</span>
+                            <span class="player-score">--</span>
+                        </div>
+                        <div class="match-status active">IN_PROGRESS</div>
+                    </div>
+
+                    <div class="match" data-match="4">
+                        <div class="player player-1">
+                            <span class="player-name">ELECTRIC_STORM</span>
+                            <span class="player-score">--</span>
+                        </div>
+                        <div class="vs-connector">VS</div>
+                        <div class="player player-2">
+                            <span class="player-name">NEON_VIPER</span>
+                            <span class="player-score">--</span>
+                        </div>
+                        <div class="match-status pending">PENDING</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Lines -->
+            <div class="bracket-connectors round-1-to-2">
+                <div class="connector-line"></div>
+                <div class="connector-line"></div>
+                <div class="connector-line"></div>
+                <div class="connector-line"></div>
+            </div>
+
+            <!-- Round 2 - Semi Finals -->
+            <div class="bracket-round" data-round="2">
+                <div class="round-header">
+                    <span class="round-label">ROUND_02</span>
+                    <span class="round-name">SEMI_FINALS</span>
+                </div>
+                <div class="matches">
+                    <div class="match" data-match="5">
+                        <div class="player player-1">
+                            <span class="player-name">CYBER_KNIGHT</span>
+                            <span class="player-score">--</span>
+                        </div>
+                        <div class="vs-connector">VS</div>
+                        <div class="player player-2">
+                            <span class="player-name">PIXEL_WARRIOR</span>
+                            <span class="player-score">--</span>
+                        </div>
+                        <div class="match-status pending">PENDING</div>
+                    </div>
+
+                    <div class="match" data-match="6">
+                        <div class="player player-1">
+                            <span class="player-name">TBD</span>
+                            <span class="player-score">--</span>
+                        </div>
+                        <div class="vs-connector">VS</div>
+                        <div class="player player-2">
+                            <span class="player-name">TBD</span>
+                            <span class="player-score">--</span>
+                        </div>
+                        <div class="match-status pending">PENDING</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Lines -->
+            <div class="bracket-connectors round-2-to-final">
+                <div class="connector-line"></div>
+                <div class="connector-line"></div>
+            </div>
+
+            <!-- Final Round -->
+            <div class="bracket-round final-round" data-round="final">
+                <div class="round-header">
+                    <span class="round-label">FINAL</span>
+                    <span class="round-name">CHAMPIONSHIP</span>
+                </div>
+                <div class="matches">
+                    <div class="match final-match" data-match="final">
+                        <div class="player player-1">
+                            <span class="player-name">TBD</span>
+                            <span class="player-score">--</span>
+                        </div>
+                        <div class="vs-connector final-vs">VS</div>
+                        <div class="player player-2">
+                            <span class="player-name">TBD</span>
+                            <span class="player-score">--</span>
+                        </div>
+                        <div class="match-status pending">PENDING</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tournament Stats -->
+        <div class="tournament-stats">
+            <div class="stat-item">
+                <span class="stat-label">PARTICIPANTS:</span>
+                <span class="stat-value">8</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">MATCHES_COMPLETED:</span>
+                <span class="stat-value">2/7</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">PRIZE_POOL:</span>
+                <span class="stat-value">1000 CREDITS</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">TIME_REMAINING:</span>
+                <span class="stat-value countdown">23:45:12</span>
+            </div>
+        </div>
+
+        <!-- Terminal Footer -->
+        <div class="terminal-footer">
+            <div class="terminal-line">
+                <span class="prompt">root@pong_arena:~$</span>
+                <span class="command">tournament_status --active</span>
+                <span class="cursor">_</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Background Effects -->
+    <div class="background-effects">
+        <div class="grid-overlay"></div>
+        <div class="scan-lines"></div>
+        <div class="glow-orb glow-1"></div>
+        <div class="glow-orb glow-2"></div>
+        <div class="glow-orb glow-3"></div>
+    </div>
+
+    <script type="module" src="tournament.js"></script>
+</body>
+</html>
