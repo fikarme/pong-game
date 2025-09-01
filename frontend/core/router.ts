@@ -9,17 +9,19 @@ class Router {
   constructor(container: HTMLElement) {
     this.container = container;
     this.setupBrowserNavigation();
-    
+
     const initialPage = this.getInitialPage();
     this.navigate(initialPage);
   }
 
   navigate(pageName: string): void {
     console.log(`Navigating to: ${pageName}`);
-    
+  // Alias routes
+  pageName = this.resolveAlias(pageName);
+
     // Sayfa değişikliği gerekli mi?
-    if (pageName === this.currentPage) return;
-    
+  if (pageName === this.currentPage) return;
+
     // Auth kontrolü ve yönlendirme
     const redirectPage = AuthGuard.getRedirectPage(pageName);
     if (redirectPage && redirectPage !== pageName) {
@@ -29,26 +31,26 @@ class Router {
       }
       return this.navigate(redirectPage);
     }
-    
+
     // History state güncelle (URL değişmeden)
-    window.history.pushState({ page: pageName }, '', window.location.href);
+  window.history.pushState({ page: pageName }, '', window.location.href);
     this.loadPage(pageName);
   }
 
   // AuthGuard için direct page load (auth kontrolü olmadan)
   loadPageDirect(pageName: string) {
     console.log(`Direct loading page: ${pageName}`);
-    
+  pageName = this.resolveAlias(pageName);
     if (pageName === this.currentPage) return;
-    
+
     window.history.replaceState({ page: pageName }, '', window.location.href);
     this.loadPage(pageName);
   }
 
   private setupBrowserNavigation() {
     window.addEventListener('popstate', (event) => {
-      const page = event.state?.page || 'landing';
-      
+  const page = this.resolveAlias(event.state?.page || 'landing');
+
       // Auth kontrolü ile yönlendirme
       const redirectPage = AuthGuard.getRedirectPage(page);
       if (redirectPage) {
@@ -60,7 +62,7 @@ class Router {
 
     // Initial state set
     if (!window.history.state || !window.history.state.page) {
-      window.history.replaceState({ page: 'landing' }, '', window.location.href);
+  window.history.replaceState({ page: 'landing' }, '', window.location.href);
     }
   }
 
@@ -91,8 +93,8 @@ class Router {
     try {
       console.log(`Loading page: ${pageName}`);
 
-      // Babylon.js cleanup
-      if (this.currentPage === 'landing' && pageName !== 'landing') {
+      // Babylon.js cleanup when leaving any Babylon-driven page
+      if (this.isBabylonPage(this.currentPage)) {
         this.cleanupBabylonjs();
       }
 
@@ -104,7 +106,7 @@ class Router {
 
       // Clean up existing event listeners and components
       this.cleanupCurrentPage();
-      
+
       // Container'ı temizle ve yeni içeriği ekle
       this.container.innerHTML = html;
 
@@ -113,7 +115,7 @@ class Router {
       if (module.init) module.init();
 
       this.currentPage = pageName;
-      
+
     } catch (error) {
       console.error('Page Load Error:', error);
       this.showError(pageName, error);
@@ -147,8 +149,8 @@ class Router {
     const wsManager = WebSocketManager.getInstance();
     wsManager.clearAllListeners();
 
-    // Babylon.js specific cleanup
-    if (this.currentPage === 'landing') {
+    // Babylon.js specific cleanup for any Babylon page
+    if (this.isBabylonPage(this.currentPage)) {
       this.cleanupBabylonjs();
     }
 
@@ -175,6 +177,15 @@ class Router {
     // Reset body background
     document.body.style.background = '';
     document.documentElement.style.background = '';
+  }
+
+  private resolveAlias(pageName: string): string {
+    if (pageName === 'game') return 'remote-game';
+    return pageName;
+  }
+
+  private isBabylonPage(pageName: string): boolean {
+    return pageName === 'landing' || pageName === 'remote-game' || pageName === 'game';
   }
 }
 
