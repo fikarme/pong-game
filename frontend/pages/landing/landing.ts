@@ -1,4 +1,7 @@
 import './crtShader.js';
+import { WebSocketManager } from '../../core/WebSocketManager.js';
+import { GameService } from '../../services/GameService.js';
+import { AppState } from '../../core/AppState.js';
 
 const PADSPEED = 0.09;
 const BALLSPEEDXDEFAULT = 0.09;
@@ -247,6 +250,16 @@ export function init() {
   let ballDirX = BALLSPEEDX, ballDirZ = BALLSPEEDZ;
   let paddle1ToCorner: number | null = null;
   let paddle2ToCorner: number | null = null;
+  let onlineMode = false;
+  let currentRoomId: string | null = null;
+  const wsManager = WebSocketManager.getInstance();
+  const gameService = new GameService();
+  const appState = AppState.getInstance();
+
+  // Helper: mapping between server (800x400) and Babylon coordinates
+  const toBabylonX = (serverX: number) => (serverX / 800) * 7.2 - 3.6; // [-3.6, 3.6]
+  const toBabylonZ = (serverY: number) => ((serverY / 400) * (2 * paddleZClamp)) - paddleZClamp; // [-clamp, clamp]
+  const toServerY = (z: number) => ((z + paddleZClamp) / (2 * paddleZClamp)) * 400; // [0, 400]
 
   // Border flash animation tracking
   let leftBorderFlashTime = 0;
@@ -265,6 +278,9 @@ export function init() {
 
   let userControlling = false;
   let uiFaded = false;
+  let myPlayerId: number | null = null;
+  let lerpFactor = 0.2; // interpolation for online updates
+  let lastServerState: any = null;
 
   function fadeOutLandingUIOnce() {
     if (uiFaded) return;
@@ -280,12 +296,21 @@ export function init() {
         userControlling = true;
   fadeOutLandingUIOnce();
         event.preventDefault();
+        if (onlineMode && currentRoomId && myPlayerId !== null) {
+          // Compute new desired server Y and send
+          const nextZ = Math.max(Math.min(paddle1.position.z - PADSPEED, paddleZClamp), -paddleZClamp);
+          gameService.movePlayer(currentRoomId, Math.max(0, Math.min(400 - 100, toServerY(nextZ))));
+        }
         break;
       case 'ArrowDown':
         keys.down = true;
         userControlling = true;
   fadeOutLandingUIOnce();
         event.preventDefault();
+        if (onlineMode && currentRoomId && myPlayerId !== null) {
+          const nextZ = Math.max(Math.min(paddle1.position.z + PADSPEED, paddleZClamp), -paddleZClamp);
+          gameService.movePlayer(currentRoomId, Math.max(0, Math.min(400 - 100, toServerY(nextZ))));
+        }
         break;
       case 'KeyG':
         (window as any).closeBabylonGame && (window as any).closeBabylonGame();
@@ -450,48 +475,50 @@ export function init() {
     paddle1Light.position.z = paddle1.position.z;
     paddle2Light.position.z = paddle2.position.z;
 
-  if (!userControlling && paddle1ToCorner !== null) {
+    if (!onlineMode && !userControlling && paddle1ToCorner !== null) {
       const dz = paddle1ToCorner - paddle1.position.z;
       if (Math.abs(dz) < 0.1) {
         paddle1.position.z = paddle1ToCorner;
         paddle1ToCorner = null;
       } else
         paddle1.position.z += Math.sign(dz) * PADSPEED * 1.2;
-    } else if (userControlling) {
+    } else if (!onlineMode && userControlling) {
       if (keys.up) {
         paddle1.position.z -= PADSPEED;
       }
       if (keys.down) {
         paddle1.position.z += PADSPEED;
       }
-    } else {
+    } else if (!onlineMode) {
       paddle1.position.z += Math.sign(ball.position.z - paddle1.position.z) * PADSPEED;
     }
 
-  if (paddle2ToCorner !== null) {
+    if (!onlineMode && paddle2ToCorner !== null) {
       const dz = paddle2ToCorner - paddle2.position.z;
       if (Math.abs(dz) < 0.1) {
         paddle2.position.z = paddle2ToCorner;
         paddle2ToCorner = null;
       } else
         paddle2.position.z += Math.sign(dz) * PADSPEED * 1.2;
-    } else
+    } else if (!onlineMode)
       paddle2.position.z += Math.sign(ball.position.z - paddle2.position.z) * PADSPEED;
 
   // Clamp paddles so they don't intersect top/bottom borders
   paddle1.position.z = Math.max(Math.min(paddle1.position.z, paddleZClamp), -paddleZClamp);
   paddle2.position.z = Math.max(Math.min(paddle2.position.z, paddleZClamp), -paddleZClamp);
 
-    ball.position.x += ballDirX;
-    ball.position.z += ballDirZ;
+    if (!onlineMode) {
+      ball.position.x += ballDirX;
+      ball.position.z += ballDirZ;
+    }
 
-    if (ball.position.z > 1.85) {
+  if (!onlineMode && ball.position.z > 1.85) {
       ball.position.z = 1.85;
       ballDirZ *= -1;
       // Trigger top border flash
       topBorderFlashTime = 1.0;
     }
-    if (ball.position.z < -1.85) {
+  if (!onlineMode && ball.position.z < -1.85) {
       ball.position.z = -1.85;
       ballDirZ *= -1;
       // Trigger bottom border flash
@@ -536,7 +563,7 @@ export function init() {
 
     const leftOut = ball.position.x < -3.85 && !(ball.position.x > paddle1.position.x - paddleMargin && ball.position.x < paddle1.position.x + paddleWidth/2 + paddleMargin && Math.abs(ball.position.z - paddle1.position.z) < paddleDepth/2 + paddleLengthMargin);
     const rightOut = ball.position.x > 3.85 && !(ball.position.x > paddle2.position.x - paddleWidth/2 - paddleMargin && ball.position.x < paddle2.position.x + paddleMargin && Math.abs(ball.position.z - paddle2.position.z) < paddleDepth/2 + paddleLengthMargin);
-    if (!paddleHit && (leftOut || rightOut)) {
+  if (!onlineMode && !paddleHit && (leftOut || rightOut)) {
       // Trigger border flash for left or right border
       if (leftOut) {
         leftBorderFlashTime = 2.0; // 2 second flash
@@ -575,4 +602,55 @@ export function init() {
   window.addEventListener('resize', () => {
     resizeCanvas();
   });
+
+  // --- Online mode wiring ---
+  try {
+    // Disable auto redirect so we can host the match on landing
+    wsManager.setAutoRedirectEnabled(false);
+
+    // If already connected and in room, enable online mode
+    const room = appState.getCurrentRoom();
+    if (wsManager.isConnected() && room) {
+      onlineMode = true;
+      currentRoomId = room.roomId;
+    }
+
+    // Listen for server state updates and map to Babylon
+    gameService.onStateUpdate((payload: any) => {
+      const state = payload.state;
+      if (!state) return;
+      lastServerState = state;
+
+      // Determine left/right assignment from state paddles ordering
+      const playerIds = Object.keys(state.paddles || {}).map((id) => parseInt(id)).sort();
+      if (playerIds.length >= 2) {
+        // Left is first, right is second
+        const leftId = playerIds[0];
+        const rightId = playerIds[1];
+
+        const leftPad = state.paddles[leftId];
+        const rightPad = state.paddles[rightId];
+        if (leftPad) {
+          const targetZ = toBabylonZ(leftPad.y);
+          paddle1.position.z += (targetZ - paddle1.position.z) * lerpFactor;
+        }
+        if (rightPad) {
+          const targetZ = toBabylonZ(rightPad.y);
+          paddle2.position.z += (targetZ - paddle2.position.z) * lerpFactor;
+        }
+      }
+
+      // Ball mapping
+      if (state.ball) {
+        const targetX = toBabylonX(state.ball.x);
+        const targetZ = toBabylonZ(state.ball.y);
+        ball.position.x += (targetX - ball.position.x) * lerpFactor;
+        ball.position.z += (targetZ - ball.position.z) * lerpFactor;
+      }
+
+      onlineMode = true;
+    });
+  } catch (e) {
+    console.warn('Online mode not initialized:', e);
+  }
 }

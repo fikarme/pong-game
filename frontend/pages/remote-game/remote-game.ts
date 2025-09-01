@@ -1,794 +1,493 @@
-import { AppState, RoomInfo } from "../../core/AppState.js";
-import { GameService } from "../../services/GameService.js";
-import { UserService } from "../../services/UserService.js";
-import { Router } from "../../core/router.js";
-import { notify } from "../../core/notify.js";
-import { WebSocketManager } from "../../core/WebSocketManager.js";
+import '../landing/crtShader.js';
+import { WebSocketManager } from '../../core/WebSocketManager.js';
+import { GameService } from '../../services/GameService.js';
+import { AppState } from '../../core/AppState.js';
 
-declare global {
-  var router: Router;
-}
+const PADSPEED = 0.09;
+const BALLSPEEDXDEFAULT = 0.09;
+const BALLSPEEDZDEFAULT = 0.07;
 
-interface GameState {
-  ball: { x: number; y: number; dx: number; dy: number };
-  paddles: { [userId: number]: { x: number; y: number; width: number; height: number } };
-  score: { [userId: number]: number };
-  gameOver: boolean;
-}
+// Color Configuration
+const COLORS = {
+  BORDER: { r: 0, g: 1, b: 0 },
+  LEFT_PADDLE: { r: 1, g: 0, b: 0 },
+  RIGHT_PADDLE: { r: 0, g: 0, b: 1 },
+  BORDER_FLASH: { r: 1, g: 0, b: 1 },
+  PADDLE_FLASH: { r: 1, g: 1, b: 0 },
+  BALL_COLORS: [
+    { r: 1, g: 1, b: 1 },
+    { r: 1, g: 0, b: 1 },
+    { r: 0, g: 1, b: 1 },
+    { r: 1, g: 0.5, b: 0 },
+    { r: 0.5, g: 0, b: 1 },
+    { r: 1, g: 1, b: 0 },
+    { r: 0, g: 1, b: 0.5 }
+  ],
+  BACKGROUND: { r: 1, g: 1, b: 1 },
+  TABLE: { r: 0, g: 0, b: 0 }
+};
 
-interface Player {
-  id: number;
-  name: string;
-  isLeft: boolean;
-}
+let currentBallColorIndex = 0;
 
 export function init() {
-  // Check if this is a page reload (no WebSocket connection)
+  console.log('Remote-game (Babylon) page loaded');
+
+  const BABYLON = (window as any).BABYLON;
+  if (!BABYLON) {
+    console.error('BABYLON is not loaded. Please include Babylon.js via CDN in your index.html.');
+    return;
+  }
+
+  let canvas = document.getElementById('babylon-canvas');
+  let realCanvas: HTMLCanvasElement;
+  if (canvas instanceof HTMLCanvasElement) {
+    realCanvas = canvas;
+  } else {
+    const createdCanvas = document.createElement('canvas');
+    createdCanvas.id = 'babylon-canvas';
+    createdCanvas.style.position = 'fixed';
+    createdCanvas.style.top = '0';
+    createdCanvas.style.left = '0';
+    createdCanvas.style.width = '100vw';
+    createdCanvas.style.height = '100vh';
+    createdCanvas.style.zIndex = '-1';
+    createdCanvas.style.pointerEvents = 'none';
+    createdCanvas.style.display = 'block';
+    createdCanvas.style.background = 'black';
+    const appDiv = document.getElementById('app');
+    if (appDiv) appDiv.appendChild(createdCanvas); else document.body.appendChild(createdCanvas);
+    realCanvas = createdCanvas;
+    document.body.style.background = 'transparent';
+    document.documentElement.style.background = 'transparent';
+  }
+
+  (window as any).closeBabylonGame = function() {
+    try {
+      engine.stopRenderLoop();
+      engine.dispose();
+    } catch (e) {}
+    if (realCanvas && realCanvas.parentNode) realCanvas.parentNode.removeChild(realCanvas);
+  };
+
+  const engine = new BABYLON.Engine(realCanvas, true);
+  const scene = new BABYLON.Scene(engine);
+  scene.clearColor = new BABYLON.Color4(0.5, 0.5, 0.5, 0.5);
+
+  function resizeCanvas() {
+    realCanvas.width = window.innerWidth;
+    realCanvas.height = window.innerHeight;
+    realCanvas.style.width = '100vw';
+    realCanvas.style.height = '100vh';
+    engine.resize();
+  }
+  resizeCanvas();
+
+  const camera = new BABYLON.ArcRotateCamera('camera', Math.PI / 2, 0, 8, BABYLON.Vector3.Zero(), scene);
+  camera.setPosition(new BABYLON.Vector3(0, 6, 0));
+  camera.setTarget(BABYLON.Vector3.Zero());
+
+  const crtFragmentShader = (window as any).crtFragmentShader;
+  BABYLON.Effect.ShadersStore['crtFragmentShader'] = crtFragmentShader;
+
+  const crtPostProcess = new BABYLON.PostProcess(
+    'CRTShaderPostProcess', 'crt', ['curvature', 'screenResolution', 'scanLineOpacity', 'vignetteOpacity', 'brightness', 'vignetteRoundness'],
+    null, 1.0, camera
+  );
+  crtPostProcess.onApply = function (effect: any) {
+    effect.setFloat2('curvature', 2.5, 2.5);
+    effect.setFloat2('screenResolution', realCanvas.width, realCanvas.height);
+    effect.setFloat2('scanLineOpacity', 1, 1);
+    effect.setFloat('vignetteOpacity', 1);
+    effect.setFloat('brightness', 1.2);
+    effect.setFloat('vignetteRoundness', 1.5);
+  };
+
+  const glowLayer = new BABYLON.GlowLayer('glow', scene);
+  glowLayer.intensity = 1.5;
+  glowLayer.blurKernelSize = 64;
+
+  const table = BABYLON.MeshBuilder.CreateBox('table', { width: 8, height: 0.1, depth: 4 }, scene);
+  const tableMat = new BABYLON.StandardMaterial('tableMat', scene);
+  tableMat.diffuseColor = new BABYLON.Color3(0, 0, 0);
+  tableMat.emissiveColor = new BABYLON.Color3(COLORS.TABLE.r, COLORS.TABLE.g, COLORS.TABLE.b);
+  tableMat.specularColor = new BABYLON.Color3(0, 0, 0);
+  table.material = tableMat;
+  table.position.y = -0.05;
+
+  const borderThickness = 0.12;
+  const leftBorder = BABYLON.MeshBuilder.CreateBox('leftBorder', { width: borderThickness, height: 0.13, depth: 4.1 }, scene);
+  leftBorder.position.x = -4 + borderThickness / 2;
+  leftBorder.position.y = 0.01;
+  const leftMat = new BABYLON.StandardMaterial('leftMat', scene);
+  leftMat.diffuseColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  leftMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  leftMat.specularColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  leftMat.alpha = 0.8;
+  leftBorder.material = leftMat;
+  glowLayer.addIncludedOnlyMesh(leftBorder);
+
+  const rightBorder = BABYLON.MeshBuilder.CreateBox('rightBorder', { width: borderThickness, height: 0.13, depth: 4.1 }, scene);
+  rightBorder.position.x = 4 - borderThickness / 2;
+  rightBorder.position.y = 0.01;
+  const rightMat = new BABYLON.StandardMaterial('rightMat', scene);
+  rightMat.diffuseColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  rightMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  rightMat.specularColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  rightMat.alpha = 0.8;
+  rightBorder.material = rightMat;
+  glowLayer.addIncludedOnlyMesh(rightBorder);
+
+  const topBorder = BABYLON.MeshBuilder.CreateBox('topBorder', { width: 7.6, height: 0.13, depth: borderThickness }, scene);
+  topBorder.position.z = 2 - borderThickness / 2;
+  topBorder.position.y = 0.01;
+  const topMat = new BABYLON.StandardMaterial('topMat', scene);
+  topMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  topMat.diffuseColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  topMat.alpha = 0.8;
+  topMat.specularColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  topBorder.material = topMat;
+  glowLayer.addIncludedOnlyMesh(topBorder);
+
+  const bottomBorder = BABYLON.MeshBuilder.CreateBox('bottomBorder', { width: 7.6, height: 0.13, depth: borderThickness }, scene);
+  bottomBorder.position.z = -2 + borderThickness / 2;
+  bottomBorder.position.y = 0.01;
+  const bottomMat = new BABYLON.StandardMaterial('bottomMat', scene);
+  bottomMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  bottomMat.diffuseColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  bottomMat.alpha = 0.8;
+  bottomMat.specularColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  bottomBorder.material = bottomMat;
+  glowLayer.addIncludedOnlyMesh(bottomBorder);
+
+  const paddleWidth = 0.1, paddleHeight = 0.3, paddleDepth = 0.9;
+  const paddle1 = BABYLON.MeshBuilder.CreateBox('paddle1', { width: paddleWidth, height: paddleHeight, depth: paddleDepth }, scene);
+  const paddle2 = BABYLON.MeshBuilder.CreateBox('paddle2', { width: paddleWidth, height: paddleHeight, depth: paddleDepth }, scene);
+  const paddle1Mat = new BABYLON.StandardMaterial('paddle1Mat', scene);
+  paddle1Mat.diffuseColor = new BABYLON.Color3(0, 0, 0);
+  paddle1Mat.emissiveColor = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
+  paddle1Mat.specularColor = new BABYLON.Color3(0, 0, 0);
+  paddle1Mat.alpha = 0.7;
+  paddle1.material = paddle1Mat;
+  const paddle2Mat = new BABYLON.StandardMaterial('paddle2Mat', scene);
+  paddle2Mat.diffuseColor = new BABYLON.Color3(0, 0, 0);
+  paddle2Mat.emissiveColor = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
+  paddle2Mat.specularColor = new BABYLON.Color3(0, 0, 0);
+  paddle2Mat.alpha = 0.7;
+  paddle2.material = paddle2Mat;
+  glowLayer.addIncludedOnlyMesh(paddle1);
+  glowLayer.addIncludedOnlyMesh(paddle2);
+  paddle1.position.x = -3.6;
+  paddle2.position.x = 3.6;
+  paddle1.position.y = paddle2.position.y = paddleHeight / 2 + 0.02;
+
+  // Compute safe Z clamp so paddles don't overlap with top/bottom borders
+  const fieldHalfDepth = 2; // half of table depth is 2
+  const borderHalf = borderThickness / 2;
+  const safetyGap = 0.02; // small visual gap from border
+  const paddleHalfDepth = paddleDepth / 2;
+  const paddleZClamp = fieldHalfDepth - borderHalf - paddleHalfDepth - safetyGap; // ~1.43
+
+  const leftBorderLight = new BABYLON.PointLight('leftBorderLight', new BABYLON.Vector3(-3.8, 0.5, 0), scene);
+  leftBorderLight.diffuse = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  leftBorderLight.intensity = 0.8;
+  leftBorderLight.range = 3.0;
+
+  const rightBorderLight = new BABYLON.PointLight('rightBorderLight', new BABYLON.Vector3(3.8, 0.5, 0), scene);
+  rightBorderLight.diffuse = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+  rightBorderLight.intensity = 0.8;
+  rightBorderLight.range = 3.0;
+
+  const paddle1Light = new BABYLON.PointLight('paddle1Light', new BABYLON.Vector3(-3.6, 0.5, 0), scene);
+  paddle1Light.diffuse = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
+  paddle1Light.intensity = 1.2;
+  paddle1Light.range = 2.5;
+
+  const paddle2Light = new BABYLON.PointLight('paddle2Light', new BABYLON.Vector3(3.6, 0.5, 0), scene);
+  paddle2Light.diffuse = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
+  paddle2Light.intensity = 1.2;
+  paddle2Light.range = 2.5;
+
+  const ball = BABYLON.MeshBuilder.CreateSphere('pongBall', { diameter: 0.3 }, scene);
+  const ballMat = new BABYLON.StandardMaterial('ballMat', scene);
+  ballMat.diffuseColor = new BABYLON.Color3(
+    COLORS.BALL_COLORS[currentBallColorIndex].r,
+    COLORS.BALL_COLORS[currentBallColorIndex].g,
+    COLORS.BALL_COLORS[currentBallColorIndex].b
+  );
+  ballMat.emissiveColor = new BABYLON.Color3(
+    COLORS.BALL_COLORS[currentBallColorIndex].r,
+    COLORS.BALL_COLORS[currentBallColorIndex].g,
+    COLORS.BALL_COLORS[currentBallColorIndex].b
+  );
+  ball.material = ballMat;
+  ball.position.y = paddleHeight / 2;
+  glowLayer.addIncludedOnlyMesh(ball);
+
+  let BALLSPEEDX = BALLSPEEDXDEFAULT;
+  let BALLSPEEDZ = BALLSPEEDZDEFAULT;
+  let ballDirX = BALLSPEEDX, ballDirZ = BALLSPEEDZ;
+  let paddle1ToCorner: number | null = null;
+  let paddle2ToCorner: number | null = null;
+  let onlineMode = false;
+  let currentRoomId: string | null = null;
   const wsManager = WebSocketManager.getInstance();
-  if (!wsManager.isConnected()) {
-    console.log('🔄 Remote-game: Page reloaded, redirecting to home for proper initialization');
-    window.router.navigate('home');
-    return;
-  }
-
-
-  const canvasElement = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!canvasElement) {
-    console.error('Canvas not found');
-    return;
-  }
-  const canvas = canvasElement; // Non-null canvas reference
-  const ctx = canvas.getContext('2d')!
-  
-  // Desktop elements
-  const player1NameEl = document.getElementById('player1-name');
-  const player2NameEl = document.getElementById('player2-name');
-  const player1InitialEl = document.getElementById('player1-initial');
-  const player2InitialEl = document.getElementById('player2-initial');
-  const player1ScoreEl = document.getElementById('player1-score');
-  const player2ScoreEl = document.getElementById('player2-score');
-  const roomIdEl = document.getElementById('room-id');
-  const gameStatusEl = document.getElementById('game-status');
-  const leaveGameBtn = document.getElementById('leave-game-btn');
-  
-  // Pause elements
-  const pauseMessageEl = document.getElementById('pause-message');
-  const pauseTextEl = document.getElementById('pause-text');
-  const pauseCountdownEl = document.getElementById('pause-countdown');
-  
-  // Mobile elements
-  const mobilePlayer1NameEl = document.getElementById('mobile-player1-name');
-  const mobilePlayer2NameEl = document.getElementById('mobile-player2-name');
-  const mobilePlayer1InitialEl = document.getElementById('mobile-player1-initial');
-  const mobilePlayer2InitialEl = document.getElementById('mobile-player2-initial');
-  const mobilePlayer1ScoreEl = document.getElementById('mobile-player1-score');
-  const mobilePlayer2ScoreEl = document.getElementById('mobile-player2-score');
-  const mobileGameStatusEl = document.getElementById('mobile-game-status');
-  const mobileLeaveBtn = document.getElementById('mobile-leave-btn');
-  const mobileUpBtn = document.getElementById('mobile-up-btn');
-  const mobileDownBtn = document.getElementById('mobile-down-btn');
-  const mobileCanvas = document.getElementById('mobile-game-canvas') as HTMLCanvasElement | null;
-  
-  // Mobile pause elements
-  const mobilePauseMessageEl = document.getElementById('mobile-pause-message');
-  const mobilePauseTextEl = document.getElementById('mobile-pause-text');
-  const mobilePauseCountdownEl = document.getElementById('mobile-pause-countdown');
-
-  const appState = AppState.getInstance();
   const gameService = new GameService();
-  const userService = new UserService();
-  const currentRoom = appState.getCurrentRoom();
+  const appState = AppState.getInstance();
 
-  if (!currentRoom) {
-    notify('No room found!');
-    router.navigate('home');
-    return;
-  }
+  // Helper: mapping between server (800x400) and Babylon coordinates
+  const toBabylonX = (serverX: number) => (serverX / 800) * 7.2 - 3.6; // [-3.6, 3.6]
+  const toBabylonZ = (serverY: number) => ((serverY / 400) * (2 * paddleZClamp)) - paddleZClamp; // [-clamp, clamp]
+  const toServerY = (z: number) => ((z + paddleZClamp) / (2 * paddleZClamp)) * 400; // [0, 400]
 
-  let gameState: GameState | null = null;
-  let players: Player[] = [];
+  // Flash tracking
+  let leftBorderFlashTime = 0;
+  let rightBorderFlashTime = 0;
+  let topBorderFlashTime = 0;
+  let bottomBorderFlashTime = 0;
+
+  let paddle1FlashTime = 0;
+  let paddle2FlashTime = 0;
+
+  const keys = { up: false, down: false };
+  let userControlling = false;
   let myPlayerId: number | null = null;
-  let keysPressed: { [key: string]: boolean } = {};
-  let pauseCountdownTimer: number | null = null;
-  
-  // Smooth movement variables
-  let lastUpdateTime = 0;
-  let animationFrameId: number | null = null;
-  let targetPaddlePositions: { [userId: number]: { y: number, targetY: number, velocity: number } } = {};
-  let lastServerUpdate = 0;
+  let lerpFactor = 0.2; // interpolation for online updates
 
-  if (roomIdEl) roomIdEl.textContent = `ROOM: ${currentRoom.roomId}`;
-  if (leaveGameBtn) leaveGameBtn.addEventListener('click', handleLeaveGame);
-  if (mobileLeaveBtn) mobileLeaveBtn.addEventListener('click', handleLeaveGame);
-  
-  // Setup canvas for mobile responsiveness
-  setupResponsiveCanvas();
-  
-  // Setup mobile touch controls
-  setupMobileControls();
-  
-  initPlayerInfo();
-  initRoomPlayerNames(); // Show player names immediately from room data
-
-  // Keyboard controls handled in smooth animation section
-
-  // Game Service Events
-  gameService.onStateUpdate((data) => {
-    if (gameStatusEl) gameStatusEl.textContent = '⚔️ BATTLE IN PROGRESS ⚔️';
-    if (mobileGameStatusEl) mobileGameStatusEl.textContent = '⚔️ BATTLE ⚔️';
-    
-    // Update server state and setup interpolation
-    const newState = data.state;
-    updatePaddleTargets(newState);
-    gameState = newState;
-    lastServerUpdate = performance.now();
-    
-    updateScores();
-    updatePlayerNames();
-  });
-
-  gameService.onGameStarted((data) => {
-    if (gameStatusEl) gameStatusEl.textContent = '⚔️ BATTLE IN PROGRESS ⚔️';
-    if (mobileGameStatusEl) mobileGameStatusEl.textContent = '⚔️ BATTLE ⚔️';
-    players = data.players || [];
-    setTimeout(() => updatePlayerNames(), 100);
-  });
-
-  gameService.onGameError((data) => {
-    if (gameStatusEl) gameStatusEl.textContent = `❌ ERROR: ${data.message}`;
-    if (mobileGameStatusEl) mobileGameStatusEl.textContent = `❌ ERROR`;
-  });
-
-  gameService.onPlayerLeft((data: any) => {
-    // Check if this is a tournament match
-    if (data.isTournamentMatch && data.tournamentId) {
-      // Tournament match - player left, return to tournament page
-      console.log('🏆 Tournament player left:', data);
-      notify(`Player ${data.leftPlayer} left the match. You win! Returning to tournament...`);
-      
-      // Update tournament state
-      appState.updateTournamentStatus('active', data.round);
-      appState.clearCurrentRoom();
-      router.navigate('tournament');
-    } else {
-      // Regular match - return to home
-      notify(`Player ${data.leftPlayer} left the game.`);
-      appState.clearCurrentRoom();
-      router.navigate('home');
-    }
-  });
-
-  gameService.onGameOver((data: any) => {
-    // Check if this is a tournament match
-    if (data.isTournamentMatch && data.tournamentId) {
-      // Tournament match completed - return to tournament page
-      console.log('🏆 Tournament match completed:', data);
-      notify(data.message + ' Returning to tournament...');
-      
-      // Update tournament state
-      appState.updateTournamentStatus('active', data.round);
-      appState.clearCurrentRoom();
-      router.navigate('tournament');
-    } else {
-      // Regular match - show end game screen
-      localStorage.setItem('gameResult', JSON.stringify({
-        winner: data.winner,
-        finalScore: data.finalScore,
-        message: data.message,
-        timestamp: Date.now()
-      }));
-      
-      appState.clearCurrentRoom();
-      router.navigate('end-game');
-    }
-  });
-
-  gameService.onGamePaused((data: any) => {
-    console.log('⏸️ Game paused:', data);
-    showPauseMessage(data.message, data.timeoutSeconds);
-  });
-
-  gameService.onGameResumed((data: any) => {
-    console.log('▶️ Game resumed:', data);
-    hidePauseMessage();
-  });
-
-  gameService.onPlayerReconnected((data: any) => {
-    console.log('🔄 Player reconnected:', data);
-    hidePauseMessage();
-  });
-
-  // Initialize game
-  initGame();
-  
-  // Start smooth animation loop
-  startSmoothAnimation();
-  
-  // Start countdown before game begins
-  startCountdown();
-
-  function initGame() {
-    if (gameStatusEl) gameStatusEl.textContent = 'Initializing...';
-    
-    // Set canvas background
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw center line
-    drawCenterLine();
-  }
-
-  function startCountdown() {
-    let count = 5;
-    if (gameStatusEl) gameStatusEl.textContent = `⚡ BATTLE STARTS IN ${count}... ⚡`;
-    if (mobileGameStatusEl) mobileGameStatusEl.textContent = `⚡ ${count} ⚡`;
-    
-    const countdownInterval = setInterval(() => {
-      count--;
-      if (count > 0) {
-        if (gameStatusEl) gameStatusEl.textContent = `⚡ BATTLE STARTS IN ${count}... ⚡`;
-        if (mobileGameStatusEl) mobileGameStatusEl.textContent = `⚡ ${count} ⚡`;
-      } else {
-        clearInterval(countdownInterval);
-        
-        // Only let the first player in the room start the game to avoid race condition
-        const isFirstPlayer = currentRoom && currentRoom.players[0] === myPlayerId;
-        if (isFirstPlayer) {
-          console.log('🎮 Starting game as first player...');
-          if (gameStatusEl) gameStatusEl.textContent = '⚡ INITIALIZING BATTLE... ⚡';
-          if (mobileGameStatusEl) mobileGameStatusEl.textContent = '⚡ INIT ⚡';
-          gameService.startGame(currentRoom.roomId);
-        } else {
-          console.log('🎮 Waiting for game to start...');
-          if (gameStatusEl) gameStatusEl.textContent = '⚡ WAITING FOR BATTLE START... ⚡';
-          if (mobileGameStatusEl) mobileGameStatusEl.textContent = '⚡ WAIT ⚡';
+  window.addEventListener('keydown', (event) => {
+    switch (event.code) {
+      case 'ArrowUp':
+        keys.up = true;
+        userControlling = true;
+        event.preventDefault();
+        if (onlineMode && currentRoomId && myPlayerId !== null) {
+          const nextZ = Math.max(Math.min(paddle1.position.z - PADSPEED, paddleZClamp), -paddleZClamp);
+          gameService.movePlayer(currentRoomId, Math.max(0, Math.min(300, toServerY(nextZ))));
         }
-        
-        // Request initial game state
-        setTimeout(() => {
-          requestGameState();
-        }, 500);
-      }
-    }, 1000);
-  }
-
-  function handleKeyPress() {
-    if (!currentRoom || !gameState || gameState.gameOver || myPlayerId === null) return;
-    
-    const myPaddle = gameState.paddles[myPlayerId];
-    if (!myPaddle) return;
-    
-    let newY: number | null = null;
-    const paddleSpeed = 15; // Balanced speed for responsive control
-    const paddleHeight = 100;
-    const gameHeight = 400;
-    
-    if (keysPressed['KeyW'] || keysPressed['ArrowUp']) {
-      newY = Math.max(1, myPaddle.y - paddleSpeed); // Minimum 1px from top
-    } else if (keysPressed['KeyS'] || keysPressed['ArrowDown']) {
-      newY = Math.min(gameHeight - paddleHeight - 1, myPaddle.y + paddleSpeed); // 1px margin from bottom
-    }
-    
-    if (newY !== null) {
-      gameService.movePlayer(currentRoom.roomId, newY);
-    }
-  }
-
-  function requestGameState() {
-    if (currentRoom) {
-      gameService.requestGameState(currentRoom.roomId);
-    }
-  }
-
-  function draw() {
-    if (!gameState) return;
-
-    const isMobile = window.innerWidth < 640;
-    const targetCanvas = isMobile && mobileCanvas ? mobileCanvas : canvas;
-    const targetCtx = targetCanvas.getContext('2d')!;
-
-    // Clear canvas
-    targetCtx.fillStyle = '#000000';
-    targetCtx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
-
-    // Draw center line
-    drawCenterLine(targetCtx, targetCanvas);
-
-    // Draw paddles
-    targetCtx.fillStyle = '#00ff00'; // Neon green for better visibility
-    
-    // Use consistent paddle dimensions that match game logic
-    const originalPaddleWidth = 10;  // Original game paddle width
-    const originalPaddleHeight = 100; // Original game paddle height
-    
-    // Scale paddle dimensions proportionally to canvas
-    const paddleWidth = (originalPaddleWidth / 800) * targetCanvas.width;
-    const paddleHeight = (originalPaddleHeight / 400) * targetCanvas.height;
-    
-    if (gameState && gameState.paddles) {
-      const playerIds = Object.keys(gameState.paddles).map(id => parseInt(id)).sort();
-      
-      // Always assign first player to left, second to right consistently
-      playerIds.forEach((playerId, index) => {
-        const paddle = gameState!.paddles[playerId];
-        if (paddle) {
-          // Scale paddle position for different canvas sizes
-          const scaledY = (paddle.y / 400) * targetCanvas.height; // Scale from original 400px height
-          const x = index === 0 ? 0 : targetCanvas.width - paddleWidth;
-          
-          targetCtx.fillRect(x, scaledY, paddleWidth, paddleHeight);
+        break;
+      case 'ArrowDown':
+        keys.down = true;
+        userControlling = true;
+        event.preventDefault();
+        if (onlineMode && currentRoomId && myPlayerId !== null) {
+          const nextZ = Math.max(Math.min(paddle1.position.z + PADSPEED, paddleZClamp), -paddleZClamp);
+          gameService.movePlayer(currentRoomId, Math.max(0, Math.min(300, toServerY(nextZ))));
         }
-      });
+        break;
     }
-
-    // Draw ball
-    if (gameState.ball) {
-      const scaledX = (gameState.ball.x / 800) * targetCanvas.width; // Scale from original 800px width
-      const scaledY = (gameState.ball.y / 400) * targetCanvas.height; // Scale from original 400px height
-      
-      // Use consistent ball size that matches game logic
-      const originalBallRadius = 8; // Original game ball radius
-      const ballRadius = (originalBallRadius / 800) * targetCanvas.width; // Scale proportionally
-      
-      targetCtx.beginPath();
-      targetCtx.arc(scaledX, scaledY, ballRadius, 0, Math.PI * 2);
-      targetCtx.fillStyle = '#00ff00'; // Neon green
-      targetCtx.fill();
-      
-    }
-  }
-
-  function drawCenterLine(targetCtx = ctx, targetCanvas = canvas) {
-    targetCtx.setLineDash([5, 15]);
-    targetCtx.beginPath();
-    targetCtx.moveTo(targetCanvas.width / 2, 0);
-    targetCtx.lineTo(targetCanvas.width / 2, targetCanvas.height);
-    targetCtx.strokeStyle = '#00ff00'; // Neon green
-    targetCtx.lineWidth = 2;
-    targetCtx.stroke();
-    targetCtx.setLineDash([]);
-  }
-
-  function updateScores() {
-    if (!gameState?.score) return;
-    
-    const playerIds = Object.keys(gameState.score).map(id => parseInt(id)).sort();
-    if (playerIds.length >= 2) {
-      const score1 = gameState.score[playerIds[0]] || 0;
-      const score2 = gameState.score[playerIds[1]] || 0;
-      
-      // Update desktop scores
-      if (player1ScoreEl) player1ScoreEl.textContent = score1.toString();
-      if (player2ScoreEl) player2ScoreEl.textContent = score2.toString();
-      
-      // Update mobile scores
-      if (mobilePlayer1ScoreEl) mobilePlayer1ScoreEl.textContent = score1.toString();
-      if (mobilePlayer2ScoreEl) mobilePlayer2ScoreEl.textContent = score2.toString();
-    }
-  }
-
-  function setupResponsiveCanvas() {
-    function updateCanvasSize() {
-      const isMobile = window.innerWidth < 640; // sm breakpoint
-      
-      if (isMobile && mobileCanvas) {
-        // Mobile: use separate mobile canvas
-        const maxWidth = Math.min(window.innerWidth - 32, 350); // 16px padding on each side
-        const aspectRatio = 400 / 800; // original height / width
-        mobileCanvas.width = maxWidth;
-        mobileCanvas.height = maxWidth * aspectRatio;
-        
-        console.log(`📱 Mobile canvas resized: ${mobileCanvas.width}x${mobileCanvas.height}`);
-      } else {
-        // Desktop: original size
-        canvas.width = 800;
-        canvas.height = 400;
-        
-        console.log(`🖥️ Desktop canvas resized: ${canvas.width}x${canvas.height}`);
-      }
-    }
-    
-    // Initial setup
-    updateCanvasSize();
-    
-    // Handle window resize with debouncing
-    let resizeTimeout: number | null = null;
-    window.addEventListener('resize', () => {
-      if (resizeTimeout) clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(updateCanvasSize, 100) as any;
-    });
-  }
-
-  function setupMobileControls() {
-    let moveInterval: number | null = null;
-    let currentDirection: 'up' | 'down' | null = null;
-
-    // Mobile up button
-    if (mobileUpBtn) {
-      // Touch start - begin moving up
-      mobileUpBtn.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        currentDirection = 'up';
-        startContinuousMovement();
-      });
-
-      // Touch end - stop moving
-      mobileUpBtn.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        stopContinuousMovement();
-      });
-
-      // Touch cancel - stop moving (important for when touch is interrupted)
-      mobileUpBtn.addEventListener('touchcancel', (e) => {
-        e.preventDefault();
-        stopContinuousMovement();
-      });
-
-      // Touch leave - stop moving (when finger slides off button)
-      mobileUpBtn.addEventListener('touchleave', (e) => {
-        e.preventDefault();
-        stopContinuousMovement();
-      });
-
-      // Also handle mouse events for testing on desktop
-      mobileUpBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        currentDirection = 'up';
-        startContinuousMovement();
-      });
-
-      mobileUpBtn.addEventListener('mouseup', (e) => {
-        e.preventDefault();
-        stopContinuousMovement();
-      });
-
-      mobileUpBtn.addEventListener('mouseleave', (e) => {
-        e.preventDefault();
-        stopContinuousMovement();
-      });
-    }
-
-    // Mobile down button
-    if (mobileDownBtn) {
-      // Touch start - begin moving down
-      mobileDownBtn.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        currentDirection = 'down';
-        startContinuousMovement();
-      });
-
-      // Touch end - stop moving
-      mobileDownBtn.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        stopContinuousMovement();
-      });
-
-      // Touch cancel - stop moving (important for when touch is interrupted)
-      mobileDownBtn.addEventListener('touchcancel', (e) => {
-        e.preventDefault();
-        stopContinuousMovement();
-      });
-
-      // Touch leave - stop moving (when finger slides off button)
-      mobileDownBtn.addEventListener('touchleave', (e) => {
-        e.preventDefault();
-        stopContinuousMovement();
-      });
-
-      // Also handle mouse events for testing on desktop
-      mobileDownBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        currentDirection = 'down';
-        startContinuousMovement();
-      });
-
-      mobileDownBtn.addEventListener('mouseup', (e) => {
-        e.preventDefault();
-        stopContinuousMovement();
-      });
-
-      mobileDownBtn.addEventListener('mouseleave', (e) => {
-        e.preventDefault();
-        stopContinuousMovement();
-      });
-    }
-
-    function startContinuousMovement() {
-      if (moveInterval) return; // Already moving
-      
-      // Move immediately
-      handleMobileMovement();
-      
-      // Continue moving every 16ms (60fps)
-      moveInterval = setInterval(handleMobileMovement, 16) as any;
-    }
-
-    function stopContinuousMovement() {
-      if (moveInterval) {
-        clearInterval(moveInterval);
-        moveInterval = null;
-      }
-      currentDirection = null;
-    }
-
-    function handleMobileMovement() {
-      if (!currentRoom || !gameState || gameState.gameOver || !currentDirection || myPlayerId === null) return;
-      
-      const myPaddle = gameState.paddles[myPlayerId];
-      if (!myPaddle) return;
-
-      const moveSpeed = 22; // Even faster mobile movement for smoothness
-      let newY = myPaddle.y;
-
-      if (currentDirection === 'up') {
-        newY = Math.max(0, myPaddle.y - moveSpeed);
-      } else if (currentDirection === 'down') {
-        newY = Math.min(400 - 100, myPaddle.y + moveSpeed);
-      }
-
-      if (newY !== myPaddle.y) {
-        gameService.movePlayer(currentRoom.roomId, newY);
-      }
-    }
-
-    // Prevent scrolling when touching game controls
-    document.addEventListener('touchmove', (e) => {
-      if (e.target === mobileUpBtn || e.target === mobileDownBtn) {
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    // Stop movement when page becomes hidden (tab switch, app backgrounded, etc.)
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        stopContinuousMovement();
-      }
-    });
-
-    // Stop movement when window loses focus
-    window.addEventListener('blur', () => {
-      stopContinuousMovement();
-    });
-  }
-
-  function handleLeaveGame() {
-    if (currentRoom) {
-      gameService.leaveGame(currentRoom.roomId);
-      appState.clearCurrentRoom();
-      router.navigate('home');
-    }
-  }
-
-  function showPauseMessage(message: string, countdownSeconds?: number) {
-    // Show pause message on desktop
-    if (pauseMessageEl) pauseMessageEl.classList.remove('hidden');
-    if (pauseTextEl) pauseTextEl.textContent = message;
-    
-    // Show pause message on mobile
-    if (mobilePauseMessageEl) mobilePauseMessageEl.classList.remove('hidden');
-    if (mobilePauseTextEl) mobilePauseTextEl.textContent = '⏸️ PAUSED';
-    
-    // Start countdown if provided
-    if (countdownSeconds) {
-      startPauseCountdown(countdownSeconds);
-    }
-  }
-
-  function hidePauseMessage() {
-    // Hide pause message on desktop
-    if (pauseMessageEl) pauseMessageEl.classList.add('hidden');
-    
-    // Hide pause message on mobile
-    if (mobilePauseMessageEl) mobilePauseMessageEl.classList.add('hidden');
-    
-    // Clear countdown timer
-    if (pauseCountdownTimer) {
-      clearInterval(pauseCountdownTimer);
-      pauseCountdownTimer = null;
-    }
-  }
-
-  function startPauseCountdown(seconds: number) {
-    if (pauseCountdownTimer) {
-      clearInterval(pauseCountdownTimer);
-    }
-    
-    let remaining = seconds;
-    
-    const updateCountdown = () => {
-      const text = `Reconnecting in ${remaining}s...`;
-      if (pauseCountdownEl) pauseCountdownEl.textContent = text;
-      if (mobilePauseCountdownEl) mobilePauseCountdownEl.textContent = text;
-      
-      remaining--;
-      
-      if (remaining < 0) {
-        clearInterval(pauseCountdownTimer!);
-        pauseCountdownTimer = null;
-      }
-    };
-    
-    updateCountdown();
-    pauseCountdownTimer = setInterval(updateCountdown, 1000) as any;
-  }
-
-  async function initPlayerInfo() {
-    const currentUser = await userService.getCurrentUser();
-    myPlayerId = currentUser?.id || null;
-  }
-
-  async function updatePlayerNames() {
-    if (!gameState?.score) return;
-    
-    const playerIds = Object.keys(gameState.score).map(id => parseInt(id)).sort();
-    if (playerIds.length < 2) return;
-
-    try {
-      const [player1, player2] = await Promise.all([
-        userService.getUserById(playerIds[0]),
-        userService.getUserById(playerIds[1])
-      ]);
-
-      // Update desktop elements
-      if (player1NameEl) player1NameEl.textContent = player1?.username || `WARRIOR ${playerIds[0]}`;
-      if (player2NameEl) player2NameEl.textContent = player2?.username || `WARRIOR ${playerIds[1]}`;
-      if (player1InitialEl) player1InitialEl.textContent = player1?.username?.[0]?.toUpperCase() || 'W1';
-      if (player2InitialEl) player2InitialEl.textContent = player2?.username?.[0]?.toUpperCase() || 'W2';
-      
-      // Update mobile elements
-      if (mobilePlayer1NameEl) mobilePlayer1NameEl.textContent = player1?.username || `WARRIOR ${playerIds[0]}`;
-      if (mobilePlayer2NameEl) mobilePlayer2NameEl.textContent = player2?.username || `WARRIOR ${playerIds[1]}`;
-      if (mobilePlayer1InitialEl) mobilePlayer1InitialEl.textContent = player1?.username?.[0]?.toUpperCase() || 'W1';
-      if (mobilePlayer2InitialEl) mobilePlayer2InitialEl.textContent = player2?.username?.[0]?.toUpperCase() || 'W2';
-    } catch (e) {
-      console.error('Error updating player names:', e);
-    }
-  }
-
-  // Initialize player names from room data immediately
-  async function initRoomPlayerNames() {
-    if (!currentRoom?.players || currentRoom.players.length < 2) {
-      console.log('⚠️ Not enough players in room for name display');
-      return;
-    }
-
-    console.log('🎮 Initializing player names from room data:', currentRoom.players);
-
-    try {
-      const [player1, player2] = await Promise.all([
-        userService.getUserById(currentRoom.players[0]),
-        userService.getUserById(currentRoom.players[1])
-      ]);
-
-      // Update desktop elements
-      if (player1NameEl) player1NameEl.textContent = player1?.username || `WARRIOR ${currentRoom.players[0]}`;
-      if (player2NameEl) player2NameEl.textContent = player2?.username || `WARRIOR ${currentRoom.players[1]}`;
-      if (player1InitialEl) player1InitialEl.textContent = player1?.username?.[0]?.toUpperCase() || 'W1';
-      if (player2InitialEl) player2InitialEl.textContent = player2?.username?.[0]?.toUpperCase() || 'W2';
-      
-      // Update mobile elements
-      if (mobilePlayer1NameEl) mobilePlayer1NameEl.textContent = player1?.username || `WARRIOR ${currentRoom.players[0]}`;
-      if (mobilePlayer2NameEl) mobilePlayer2NameEl.textContent = player2?.username || `WARRIOR ${currentRoom.players[1]}`;
-      if (mobilePlayer1InitialEl) mobilePlayer1InitialEl.textContent = player1?.username?.[0]?.toUpperCase() || 'W1';
-      if (mobilePlayer2InitialEl) mobilePlayer2InitialEl.textContent = player2?.username?.[0]?.toUpperCase() || 'W2';
-      
-      // Show initial scores as 0-0
-      if (player1ScoreEl) player1ScoreEl.textContent = '0';
-      if (player2ScoreEl) player2ScoreEl.textContent = '0';
-      if (mobilePlayer1ScoreEl) mobilePlayer1ScoreEl.textContent = '0';
-      if (mobilePlayer2ScoreEl) mobilePlayer2ScoreEl.textContent = '0';
-      
-      console.log('🎮 Player names initialized:', {
-        player1: player1?.username,
-        player2: player2?.username
-      });
-    } catch (e) {
-      console.error('Error initializing player names:', e);
-    }
-  }
-
-  // Smooth animation functions
-  function startSmoothAnimation() {
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    
-    function animate(currentTime: number) {
-      const deltaTime = currentTime - lastUpdateTime;
-      lastUpdateTime = currentTime;
-      
-      // Update paddle interpolation
-      updatePaddleInterpolation(deltaTime);
-      
-      // Draw the frame
-      draw();
-      
-      // Continue animation loop
-      animationFrameId = requestAnimationFrame(animate);
-    }
-    
-    lastUpdateTime = performance.now();
-    animationFrameId = requestAnimationFrame(animate);
-  }
-
-  function updatePaddleTargets(newState: GameState) {
-    if (!newState.paddles) return;
-    
-    Object.keys(newState.paddles).forEach(userIdStr => {
-      const userId = parseInt(userIdStr);
-      const serverPaddle = newState.paddles[userId];
-      
-      if (!targetPaddlePositions[userId]) {
-        // Initialize paddle position
-        targetPaddlePositions[userId] = {
-          y: serverPaddle.y,
-          targetY: serverPaddle.y,
-          velocity: 0
-        };
-      } else {
-        // Update target position
-        targetPaddlePositions[userId].targetY = serverPaddle.y;
-      }
-    });
-  }
-
-  function updatePaddleInterpolation(deltaTime: number) {
-    if (!gameState?.paddles) return;
-    
-    const timeSinceLastUpdate = performance.now() - lastServerUpdate;
-    const interpolationFactor = Math.min(timeSinceLastUpdate / 100, 1); // Interpolate over 100ms
-    
-    Object.keys(targetPaddlePositions).forEach(userIdStr => {
-      const userId = parseInt(userIdStr);
-      const paddlePos = targetPaddlePositions[userId];
-      
-      if (!paddlePos || !gameState?.paddles[userId]) return;
-      
-      // Smooth interpolation with easing
-      const diff = paddlePos.targetY - paddlePos.y;
-      const speed = Math.abs(diff) > 1 ? diff * 0.4 : diff;
-      
-      paddlePos.y += speed;
-      
-      // Update game state with interpolated position, ensure boundaries
-      if (gameState?.paddles[userId]) {
-        const clampedY = Math.max(0, Math.min(300, paddlePos.y)); // 400-100=300 max
-        gameState.paddles[userId].y = clampedY;
-        paddlePos.y = clampedY; // Sync interpolation position
-      }
-    });
-  }
-
-  // Improved keyboard handling with continuous movement
-  let keyboardUpdateInterval: number | null = null;
-
-  function startKeyboardMovement() {
-    if (keyboardUpdateInterval) return;
-    
-    keyboardUpdateInterval = setInterval(() => {
-      if (Object.keys(keysPressed).some(key => keysPressed[key])) {
-        handleKeyPress();
-      }
-    }, 8) as any; // 120 FPS for more responsive input
-  }
-
-  function stopKeyboardMovement() {
-    if (keyboardUpdateInterval) {
-      clearInterval(keyboardUpdateInterval);
-      keyboardUpdateInterval = null;
-    }
-  }
-
-  // Enhanced keyboard event listeners
-  document.addEventListener('keydown', (e) => {
-    if (!keysPressed[e.code]) {
-      keysPressed[e.code] = true;
-      startKeyboardMovement();
+  });
+  window.addEventListener('keyup', (event) => {
+    switch (event.code) {
+      case 'ArrowUp': keys.up = false; event.preventDefault(); break;
+      case 'ArrowDown': keys.down = false; event.preventDefault(); break;
     }
   });
 
-  document.addEventListener('keyup', (e) => {
-    keysPressed[e.code] = false;
-    if (!Object.keys(keysPressed).some(key => keysPressed[key])) {
-      stopKeyboardMovement();
+  engine.runRenderLoop(() => {
+    const deltaTime = engine.getDeltaTime() / 1000;
+
+    // Flash animations (borders/paddles)
+    if (leftBorderFlashTime > 0) {
+      leftBorderFlashTime -= deltaTime;
+      const flash = leftBorderFlashTime / 2.0;
+      if (flash > 0) {
+        leftMat.emissiveColor = new BABYLON.Color3(
+          COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * flash,
+          COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * flash,
+          COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * flash
+        );
+        leftBorderLight.intensity = 0.8 + 3.0 * flash;
+      } else {
+        leftMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+        leftBorderLight.intensity = 0.8;
+      }
     }
+    if (rightBorderFlashTime > 0) {
+      rightBorderFlashTime -= deltaTime;
+      const flash = rightBorderFlashTime / 2.0;
+      if (flash > 0) {
+        rightMat.emissiveColor = new BABYLON.Color3(
+          COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * flash,
+          COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * flash,
+          COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * flash
+        );
+        rightBorderLight.intensity = 0.8 + 3.0 * flash;
+      } else {
+        rightMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+        rightBorderLight.intensity = 0.8;
+      }
+    }
+
+    if (paddle1FlashTime > 0) {
+      paddle1FlashTime -= deltaTime;
+      const flash = paddle1FlashTime / 1.0;
+      if (flash > 0) {
+        paddle1Mat.emissiveColor = new BABYLON.Color3(
+          COLORS.LEFT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.LEFT_PADDLE.r) * flash,
+          COLORS.LEFT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.LEFT_PADDLE.g) * flash,
+          COLORS.LEFT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.LEFT_PADDLE.b) * flash
+        );
+        paddle1Light.intensity = 1.2 + 2.0 * flash;
+      } else {
+        paddle1Mat.emissiveColor = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
+        paddle1Light.intensity = 1.2;
+      }
+    }
+    if (paddle2FlashTime > 0) {
+      paddle2FlashTime -= deltaTime;
+      const flash = paddle2FlashTime / 1.0;
+      if (flash > 0) {
+        paddle2Mat.emissiveColor = new BABYLON.Color3(
+          COLORS.RIGHT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.RIGHT_PADDLE.r) * flash,
+          COLORS.RIGHT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.RIGHT_PADDLE.g) * flash,
+          COLORS.RIGHT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.RIGHT_PADDLE.b) * flash
+        );
+        paddle2Light.intensity = 1.2 + 2.0 * flash;
+      } else {
+        paddle2Mat.emissiveColor = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
+        paddle2Light.intensity = 1.2;
+      }
+    }
+
+    paddle1Light.position.z = paddle1.position.z;
+    paddle2Light.position.z = paddle2.position.z;
+
+    // Local control or AI only when not online
+    if (!onlineMode && !userControlling && paddle1ToCorner !== null) {
+      const dz = paddle1ToCorner - paddle1.position.z;
+      if (Math.abs(dz) < 0.1) { paddle1.position.z = paddle1ToCorner; paddle1ToCorner = null; }
+      else paddle1.position.z += Math.sign(dz) * PADSPEED * 1.2;
+    } else if (!onlineMode && userControlling) {
+      if (keys.up) paddle1.position.z -= PADSPEED;
+      if (keys.down) paddle1.position.z += PADSPEED;
+    } else if (!onlineMode) {
+      paddle1.position.z += Math.sign(ball.position.z - paddle1.position.z) * PADSPEED;
+    }
+
+    if (!onlineMode && paddle2ToCorner !== null) {
+      const dz = paddle2ToCorner - paddle2.position.z;
+      if (Math.abs(dz) < 0.1) { paddle2.position.z = paddle2ToCorner; paddle2ToCorner = null; }
+      else paddle2.position.z += Math.sign(dz) * PADSPEED * 1.2;
+    } else if (!onlineMode) {
+      paddle2.position.z += Math.sign(ball.position.z - paddle2.position.z) * PADSPEED;
+    }
+
+    paddle1.position.z = Math.max(Math.min(paddle1.position.z, paddleZClamp), -paddleZClamp);
+    paddle2.position.z = Math.max(Math.min(paddle2.position.z, paddleZClamp), -paddleZClamp);
+
+    if (!onlineMode) {
+      ball.position.x += ballDirX;
+      ball.position.z += ballDirZ;
+    }
+
+    if (!onlineMode && ball.position.z > 1.85) { ball.position.z = 1.85; ballDirZ *= -1; topBorderFlashTime = 1.0; }
+    if (!onlineMode && ball.position.z < -1.85) { ball.position.z = -1.85; ballDirZ *= -1; bottomBorderFlashTime = 1.0; }
+
+    let paddleHit = false;
+    const paddleMargin = 0.2;
+    const paddleLengthMargin = 0.1;
+
+    if (!onlineMode && (
+      ball.position.x < paddle1.position.x + paddleWidth / 2 + paddleMargin &&
+      ball.position.x > paddle1.position.x - paddleMargin &&
+      Math.abs(ball.position.z - paddle1.position.z) < paddleDepth / 2 + paddleLengthMargin
+    )) {
+      ball.position.x = paddle1.position.x + paddleWidth / 2 + paddleMargin;
+      BALLSPEEDX += 0.01; BALLSPEEDZ += 0.01;
+      const norm = Math.sqrt(ballDirX * ballDirX + ballDirZ * ballDirZ);
+      ballDirX = Math.abs(ballDirX / norm) * BALLSPEEDX;
+      ballDirZ = (ballDirZ / Math.abs(ballDirZ)) * Math.abs(ballDirZ / norm) * BALLSPEEDZ;
+      paddleHit = true;
+      paddle1FlashTime = 1.0;
+      if (!userControlling) paddle1ToCorner = -paddleZClamp;
+    }
+
+    if (!onlineMode && (
+      ball.position.x > paddle2.position.x - paddleWidth / 2 - paddleMargin &&
+      ball.position.x < paddle2.position.x + paddleMargin &&
+      Math.abs(ball.position.z - paddle2.position.z) < paddleDepth / 2 + paddleLengthMargin
+    )) {
+      ball.position.x = paddle2.position.x - paddleWidth / 2 - paddleMargin;
+      BALLSPEEDX += 0.01; BALLSPEEDZ += 0.01;
+      const norm = Math.sqrt(ballDirX * ballDirX + ballDirZ * ballDirZ);
+      ballDirX = -Math.abs(ballDirX / norm) * BALLSPEEDX;
+      ballDirZ = (ballDirZ / Math.abs(ballDirZ)) * Math.abs(ballDirZ / norm) * BALLSPEEDZ;
+      paddleHit = true;
+      paddle2FlashTime = 1.0;
+      paddle2ToCorner = paddleZClamp;
+    }
+
+    const leftOut = !onlineMode && ball.position.x < -3.85 && !(
+      ball.position.x > paddle1.position.x - paddleMargin &&
+      ball.position.x < paddle1.position.x + paddleWidth / 2 + paddleMargin &&
+      Math.abs(ball.position.z - paddle1.position.z) < paddleDepth / 2 + paddleLengthMargin
+    );
+    const rightOut = !onlineMode && ball.position.x > 3.85 && !(
+      ball.position.x > paddle2.position.x - paddleWidth / 2 - paddleMargin &&
+      ball.position.x < paddle2.position.x + paddleMargin &&
+      Math.abs(ball.position.z - paddle2.position.z) < paddleDepth / 2 + paddleLengthMargin
+    );
+    if (!onlineMode && !paddleHit && (leftOut || rightOut)) {
+      if (leftOut) leftBorderFlashTime = 2.0; else rightBorderFlashTime = 2.0;
+      currentBallColorIndex = (currentBallColorIndex + 1) % COLORS.BALL_COLORS.length;
+      ball.position.x = 0; ball.position.z = 0;
+      BALLSPEEDX = BALLSPEEDXDEFAULT; BALLSPEEDZ = BALLSPEEDZDEFAULT;
+      ballDirX = (Math.random() > 0.5 ? 1 : -1) * BALLSPEEDX;
+      ballDirZ = (Math.random() > 0.5 ? 1 : -1) * BALLSPEEDZ;
+      ballMat.diffuseColor = new BABYLON.Color3(
+        COLORS.BALL_COLORS[currentBallColorIndex].r,
+        COLORS.BALL_COLORS[currentBallColorIndex].g,
+        COLORS.BALL_COLORS[currentBallColorIndex].b
+      );
+      ballMat.emissiveColor = new BABYLON.Color3(
+        COLORS.BALL_COLORS[currentBallColorIndex].r,
+        COLORS.BALL_COLORS[currentBallColorIndex].g,
+        COLORS.BALL_COLORS[currentBallColorIndex].b
+      );
+      return scene.render();
+    }
+
+    scene.render();
   });
+
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+  });
+
+  // Online mode wiring
+  try {
+    const room = appState.getCurrentRoom();
+    if (wsManager.isConnected() && room) {
+      onlineMode = true;
+      currentRoomId = room.roomId;
+    }
+    gameService.onStateUpdate((payload: any) => {
+      const state = payload.state;
+      if (!state) return;
+
+      const playerIds = Object.keys(state.paddles || {}).map((id) => parseInt(id)).sort();
+      if (playerIds.length >= 2) {
+        const leftId = playerIds[0];
+        const rightId = playerIds[1];
+        const leftPad = state.paddles[leftId];
+        const rightPad = state.paddles[rightId];
+        if (leftPad) {
+          const targetZ = toBabylonZ(leftPad.y);
+          paddle1.position.z += (targetZ - paddle1.position.z) * lerpFactor;
+        }
+        if (rightPad) {
+          const targetZ = toBabylonZ(rightPad.y);
+          paddle2.position.z += (targetZ - paddle2.position.z) * lerpFactor;
+        }
+      }
+      if (state.ball) {
+        const targetX = toBabylonX(state.ball.x);
+        const targetZ = toBabylonZ(state.ball.y);
+        ball.position.x += (targetX - ball.position.x) * lerpFactor;
+        ball.position.z += (targetZ - ball.position.z) * lerpFactor;
+      }
+      onlineMode = true;
+    });
+  } catch (e) {
+    console.warn('Online mode not initialized:', e);
+  }
 }

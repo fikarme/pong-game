@@ -12,6 +12,7 @@ export class WebSocketManager {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private shouldReconnect = true;
+  private autoRedirectEnabled = true;
 
   private constructor() {}
 
@@ -36,23 +37,23 @@ export class WebSocketManager {
     if (this.ws?.readyState === WebSocket.OPEN) return;
 
     this.ws = new WebSocket(this.url, this.token);
-    
+
     this.ws.onopen = () => {
       console.log('🟢 WS: Connected');
       this.reconnectAttempts = 0;
       this.emit('connected', {});
-      
+
       // Removed automatic lobby redirect - let backend handle page navigation
     };
 
     this.ws.onmessage = (event) => {
       try {
         const message: any = JSON.parse(event.data);
-        
+
         if (message.type === 'message') {
           console.log('📨 WS: Chat received ->', {
             from: message.from,
-            to: message.to, 
+            to: message.to,
             content: message.content,
             id: message.id
           });
@@ -62,9 +63,9 @@ export class WebSocketManager {
             event: message.event,
             data: message.data
           });
-          
+
           // If room-state message, redirect to remote-game
-          if (message.event === 'room-state') {
+          if (message.event === 'room-state' && this.autoRedirectEnabled) {
             console.log('🎮 WS: Game state received, redirecting to remote-game');
             const currentPath = window.location.pathname;
             if (!currentPath.includes('remote-game')) {
@@ -74,7 +75,7 @@ export class WebSocketManager {
               }, 100);
             }
           }
-          
+
           // Emit both the general 'game' event and the specific event
           this.emit(message.type, message.data || message);
           if (message.event) {
@@ -156,7 +157,7 @@ export class WebSocketManager {
 
   off(event: string, callback?: Function): void {
     if (!this.listeners.has(event)) return;
-    
+
     if (callback) {
       // Remove specific callback
       const callbacks = this.listeners.get(event)!;
@@ -195,15 +196,19 @@ export class WebSocketManager {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
+  setAutoRedirectEnabled(enabled: boolean): void {
+    this.autoRedirectEnabled = enabled;
+  }
+
   private handleNavigation(message: any): void {
     const { page, reason } = message;
     console.log(`🧭 WS: Navigation redirect to ${page} (reason: ${reason})`);
-    
+
     if (!page) {
       console.log('❌ WS: Navigation page is undefined, skipping redirect');
       return;
     }
-    
+
     setTimeout(() => {
       (window as any).router.navigate(page);
     }, 100);
@@ -211,7 +216,7 @@ export class WebSocketManager {
 
   private checkRoomAndRedirect(): void {
     const appState = AppState.getInstance();
-    
+
     if (appState.isInRoom()) {
       const currentRoom = appState.getCurrentRoom();
       console.log('🏠 User is in room:', currentRoom?.roomId, '- Redirecting to lobby');
