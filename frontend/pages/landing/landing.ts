@@ -3,150 +3,148 @@ import { WebSocketManager } from '../../core/WebSocketManager.js';
 import { GameService } from '../../services/GameService.js';
 import { AppState } from '../../core/AppState.js';
 
-const PADSPEED = 0.09;
-const BALLSPEEDXDEFAULT = 0.09;
-const BALLSPEEDZDEFAULT = 0.07;
+// Speeds are units per second (time-based)
+const PADSPEED = 1.8;
+const BALLSPEEDXDEFAULT = 1.8;
+const BALLSPEEDZDEFAULT = 1.4;
 
 // Color Configuration
 const COLORS = {
-  BORDER: { r: 0, g: 1, b: 0 }, // Green borders
-  LEFT_PADDLE: { r: 1, g: 0, b: 0 }, // Red left paddle
-  RIGHT_PADDLE: { r: 0, g: 0, b: 1 }, // Blue right paddle
-  BORDER_FLASH: { r: 1, g: 0, b: 1 }, // Bright magenta border flash
-  PADDLE_FLASH: { r: 1, g: 1, b: 0 }, // Yellow paddle flash
+  BORDER: { r: 0, g: 1, b: 0 },
+  LEFT_PADDLE: { r: 1, g: 0, b: 0 },
+  RIGHT_PADDLE: { r: 0, g: 0, b: 1 },
+  BORDER_FLASH: { r: 1, g: 0, b: 1 },
+  PADDLE_FLASH: { r: 1, g: 1, b: 0 },
   BALL_COLORS: [
-    { r: 1, g: 1, b: 1 }, // White
-    { r: 1, g: 0, b: 1 }, // Magenta
-    { r: 0, g: 1, b: 1 }, // Cyan
-    { r: 1, g: 0.5, b: 0 }, // Orange
-    { r: 0.5, g: 0, b: 1 }, // Purple
-    { r: 1, g: 1, b: 0 }, // Yellow
-    { r: 0, g: 1, b: 0.5 } // Green-cyan
+    { r: 1, g: 1, b: 1 },
+    { r: 1, g: 0, b: 1 },
+    { r: 0, g: 1, b: 1 },
+    { r: 1, g: 0.5, b: 0 },
+    { r: 0.5, g: 0, b: 1 },
+    { r: 1, g: 1, b: 0 },
+    { r: 0, g: 1, b: 0.5 }
   ],
-  BACKGROUND: { r: 1, g: 1, b: 1 }, // white background
-  TABLE: { r: 0, g: 0, b: 0 } // Gray table
+  BACKGROUND: { r: 1, g: 1, b: 1 },
+  TABLE: { r: 0, g: 0, b: 0 }
 };
 
 let currentBallColorIndex = 0;
 
-function startTypingEffect() {
-  const typingElement = document.querySelector('.typing-text') as HTMLElement;
-  if (!typingElement) return;
+enum ControlState { Idle = 'Idle', Human = 'Human', AI = 'AI' }
 
+type GameController = {
+  start: () => void;
+  stop: () => void;
+};
+
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const nowMs = () => Date.now();
+
+function startTypingEffect() {
+  const typingElement = document.querySelector('.typing-text') as HTMLElement | null;
+  if (!typingElement) return;
   const text = 'PONG';
   typingElement.textContent = '';
   let i = 0;
-
-  function typeChar() {
+  const typeChar = () => {
     if (i < text.length && typingElement) {
-      typingElement.textContent += text[i];
-      i++;
+      typingElement.textContent += text[i++];
       setTimeout(typeChar, 250);
     }
-  }
-
+  };
   setTimeout(typeChar, 500);
 }
 
-export function init() {
-  console.log('Landing page loaded');
-
-  startTypingEffect();
-
-  const BABYLON = (window as any).BABYLON;
-  if (!BABYLON) {
-    console.error('BABYLON is not loaded. Please include Babylon.js via CDN in your index.html.');
-    return;
-  }
-
+// --- Builders ---
+function buildEngineAndScene(BABYLON: any) {
   let canvas = document.getElementById('babylon-canvas');
+  let createdCanvas = false;
   let realCanvas: HTMLCanvasElement;
-  if (canvas instanceof HTMLCanvasElement)
+  if (canvas instanceof HTMLCanvasElement) {
     realCanvas = canvas;
-  else {
-    const createdCanvas = document.createElement('canvas');
-    createdCanvas.id = 'babylon-canvas';
-    createdCanvas.style.position = 'fixed';
-    createdCanvas.style.top = '0';
-    createdCanvas.style.left = '0';
-    createdCanvas.style.width = '100vw';
-    createdCanvas.style.height = '100vh';
-    createdCanvas.style.zIndex = '-1';
-    createdCanvas.style.pointerEvents = 'none';
-    createdCanvas.style.display = 'block';
-    createdCanvas.style.background = 'black';
-
+  } else {
+    const created = document.createElement('canvas');
+    created.id = 'babylon-canvas';
+    created.style.position = 'fixed';
+    created.style.top = '0';
+    created.style.left = '0';
+    created.style.width = '100vw';
+    created.style.height = '100vh';
+    created.style.zIndex = '-1';
+    created.style.pointerEvents = 'none';
+    created.style.display = 'block';
+    created.style.background = 'black';
     const appDiv = document.getElementById('app');
-    if (appDiv) {
-      appDiv.appendChild(createdCanvas);
-    } else {
-      document.body.appendChild(createdCanvas);
-    }
-
-    realCanvas = createdCanvas;
+    (appDiv || document.body).appendChild(created);
+    realCanvas = created;
+    createdCanvas = true;
     document.body.style.background = 'transparent';
     document.documentElement.style.background = 'transparent';
   }
-
-  (window as any).closeBabylonGame = function() {
-    try {
-      engine.stopRenderLoop();
-      engine.dispose();
-    } catch (e) {}
-    if (realCanvas && realCanvas.parentNode)
-      realCanvas.parentNode.removeChild(realCanvas);
-  };
 
   const engine = new BABYLON.Engine(realCanvas, true);
   const scene = new BABYLON.Scene(engine);
   scene.clearColor = new BABYLON.Color4(0.5, 0.5, 0.5, 0.5);
 
-  function resizeCanvas() {
+  const resizeCanvas = () => {
     realCanvas.width = window.innerWidth;
     realCanvas.height = window.innerHeight;
     realCanvas.style.width = '100vw';
     realCanvas.style.height = '100vh';
     engine.resize();
-  }
+  };
   resizeCanvas();
 
+  const onResize = () => resizeCanvas();
+  window.addEventListener('resize', onResize);
+
+  const disposeCanvas = () => {
+    window.removeEventListener('resize', onResize);
+    if (createdCanvas && realCanvas.parentNode) realCanvas.parentNode.removeChild(realCanvas);
+  };
+
+  return { engine, scene, canvas: realCanvas, disposeCanvas };
+}
+
+function buildCameraAndPostFX(BABYLON: any, scene: any, canvas: HTMLCanvasElement) {
   const camera = new BABYLON.ArcRotateCamera('camera', Math.PI / 2, 0, 8, BABYLON.Vector3.Zero(), scene);
   camera.setPosition(new BABYLON.Vector3(0, 6, 0));
   camera.setTarget(BABYLON.Vector3.Zero());
 
   const crtFragmentShader = (window as any).crtFragmentShader;
-  BABYLON.Effect.ShadersStore["crtFragmentShader"] = crtFragmentShader;
+  BABYLON.Effect.ShadersStore['crtFragmentShader'] = crtFragmentShader;
 
   const crtPostProcess = new BABYLON.PostProcess(
-    "CRTShaderPostProcess", "crt", ["curvature", "screenResolution", "scanLineOpacity", "vignetteOpacity", "brightness", "vignetteRoundness"],
-    null,
-    1.0,
-    camera
+    'CRTShaderPostProcess', 'crt', ['curvature', 'screenResolution', 'scanLineOpacity', 'vignetteOpacity', 'brightness', 'vignetteRoundness'],
+    null, 1.0, camera
   );
-  crtPostProcess.onApply = function (effect: any) {
-    effect.setFloat2("curvature", 2.5, 2.5);
-    effect.setFloat2("screenResolution", realCanvas.width, realCanvas.height);
-    effect.setFloat2("scanLineOpacity", 1, 1);
-    effect.setFloat("vignetteOpacity", 1);
-    effect.setFloat("brightness", 1.2);
-    effect.setFloat("vignetteRoundness", 1.5);
+  crtPostProcess.onApply = (effect: any) => {
+    effect.setFloat2('curvature', 2.5, 2.5);
+    effect.setFloat2('screenResolution', canvas.width, canvas.height);
+    effect.setFloat2('scanLineOpacity', 1, 1);
+    effect.setFloat('vignetteOpacity', 1);
+    effect.setFloat('brightness', 1.2);
+    effect.setFloat('vignetteRoundness', 1.5);
   };
 
-  const glowLayer = new BABYLON.GlowLayer("glow", scene);
+  const glowLayer = new BABYLON.GlowLayer('glow', scene);
   glowLayer.intensity = 1.5;
   glowLayer.blurKernelSize = 64;
+  return { camera, crtPostProcess, glowLayer };
+}
 
+function buildTableAndBorders(BABYLON: any, scene: any, glowLayer: any) {
   const table = BABYLON.MeshBuilder.CreateBox('table', { width: 8, height: 0.1, depth: 4 }, scene);
   const tableMat = new BABYLON.StandardMaterial('tableMat', scene);
   tableMat.diffuseColor = new BABYLON.Color3(0, 0, 0);
   tableMat.emissiveColor = new BABYLON.Color3(COLORS.TABLE.r, COLORS.TABLE.g, COLORS.TABLE.b);
-  tableMat.specularColor = new BABYLON.Color3(0,0,0);
+  tableMat.specularColor = new BABYLON.Color3(0, 0, 0);
   table.material = tableMat;
   table.position.y = -0.05;
 
   const borderThickness = 0.12;
   const leftBorder = BABYLON.MeshBuilder.CreateBox('leftBorder', { width: borderThickness, height: 0.13, depth: 4.1 }, scene);
-  leftBorder.position.x = -4 + borderThickness/2;
+  leftBorder.position.x = -4 + borderThickness / 2;
   leftBorder.position.y = 0.01;
   const leftMat = new BABYLON.StandardMaterial('leftMat', scene);
   leftMat.diffuseColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
@@ -157,7 +155,7 @@ export function init() {
   glowLayer.addIncludedOnlyMesh(leftBorder);
 
   const rightBorder = BABYLON.MeshBuilder.CreateBox('rightBorder', { width: borderThickness, height: 0.13, depth: 4.1 }, scene);
-  rightBorder.position.x = 4 - borderThickness/2;
+  rightBorder.position.x = 4 - borderThickness / 2;
   rightBorder.position.y = 0.01;
   const rightMat = new BABYLON.StandardMaterial('rightMat', scene);
   rightMat.diffuseColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
@@ -166,8 +164,9 @@ export function init() {
   rightMat.alpha = 0.8;
   rightBorder.material = rightMat;
   glowLayer.addIncludedOnlyMesh(rightBorder);
+
   const topBorder = BABYLON.MeshBuilder.CreateBox('topBorder', { width: 7.6, height: 0.13, depth: borderThickness }, scene);
-  topBorder.position.z = 2 - borderThickness/2;
+  topBorder.position.z = 2 - borderThickness / 2;
   topBorder.position.y = 0.01;
   const topMat = new BABYLON.StandardMaterial('topMat', scene);
   topMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
@@ -178,7 +177,7 @@ export function init() {
   glowLayer.addIncludedOnlyMesh(topBorder);
 
   const bottomBorder = BABYLON.MeshBuilder.CreateBox('bottomBorder', { width: 7.6, height: 0.13, depth: borderThickness }, scene);
-  bottomBorder.position.z = -2 + borderThickness/2;
+  bottomBorder.position.z = -2 + borderThickness / 2;
   bottomBorder.position.y = 0.01;
   const bottomMat = new BABYLON.StandardMaterial('bottomMat', scene);
   bottomMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
@@ -188,6 +187,10 @@ export function init() {
   bottomBorder.material = bottomMat;
   glowLayer.addIncludedOnlyMesh(bottomBorder);
 
+  return { table, borderThickness, leftBorder, rightBorder, topBorder, bottomBorder, leftMat, rightMat, topMat, bottomMat };
+}
+
+function buildPaddlesAndLights(BABYLON: any, scene: any, glowLayer: any, borderThickness: number) {
   const paddleWidth = 0.1, paddleHeight = 0.3, paddleDepth = 0.9;
   const paddle1 = BABYLON.MeshBuilder.CreateBox('paddle1', { width: paddleWidth, height: paddleHeight, depth: paddleDepth }, scene);
   const paddle2 = BABYLON.MeshBuilder.CreateBox('paddle2', { width: paddleWidth, height: paddleHeight, depth: paddleDepth }, scene);
@@ -203,114 +206,83 @@ export function init() {
   paddle2Mat.specularColor = new BABYLON.Color3(0, 0, 0);
   paddle2Mat.alpha = 0.7;
   paddle2.material = paddle2Mat;
-  // Add paddles to glow layer
   glowLayer.addIncludedOnlyMesh(paddle1);
   glowLayer.addIncludedOnlyMesh(paddle2);
   paddle1.position.x = -3.6;
   paddle2.position.x = 3.6;
-  paddle1.position.y = paddle2.position.y = paddleHeight/2 + 0.02;
+  paddle1.position.y = paddle2.position.y = paddleHeight / 2 + 0.02;
 
-  // Compute safe Z clamp so paddles don't overlap with top/bottom borders
-  const fieldHalfDepth = 2; // half of table depth is 2
+  // Clamp computation
+  const fieldHalfDepth = 2;
   const borderHalf = borderThickness / 2;
-  const safetyGap = 0.02; // small visual gap from border
+  const safetyGap = 0.02;
   const paddleHalfDepth = paddleDepth / 2;
-  const paddleZClamp = fieldHalfDepth - borderHalf - paddleHalfDepth - safetyGap; // e.g., ~1.43
+  const paddleZClamp = fieldHalfDepth - borderHalf - paddleHalfDepth - safetyGap;
 
-  const leftBorderLight = new BABYLON.PointLight("leftBorderLight", new BABYLON.Vector3(-3.8, 0.5, 0), scene);
+  // Lights
+  const leftBorderLight = new BABYLON.PointLight('leftBorderLight', new BABYLON.Vector3(-3.8, 0.5, 0), scene);
   leftBorderLight.diffuse = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
   leftBorderLight.intensity = 0.8;
   leftBorderLight.range = 3.0;
 
-  const rightBorderLight = new BABYLON.PointLight("rightBorderLight", new BABYLON.Vector3(3.8, 0.5, 0), scene);
+  const rightBorderLight = new BABYLON.PointLight('rightBorderLight', new BABYLON.Vector3(3.8, 0.5, 0), scene);
   rightBorderLight.diffuse = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
   rightBorderLight.intensity = 0.8;
   rightBorderLight.range = 3.0;
 
-  const paddle1Light = new BABYLON.PointLight("paddle1Light", new BABYLON.Vector3(-3.6, 0.5, 0), scene);
+  const paddle1Light = new BABYLON.PointLight('paddle1Light', new BABYLON.Vector3(-3.6, 0.5, 0), scene);
   paddle1Light.diffuse = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
   paddle1Light.intensity = 1.2;
   paddle1Light.range = 2.5;
 
-  const paddle2Light = new BABYLON.PointLight("paddle2Light", new BABYLON.Vector3(3.6, 0.5, 0), scene);
+  const paddle2Light = new BABYLON.PointLight('paddle2Light', new BABYLON.Vector3(3.6, 0.5, 0), scene);
   paddle2Light.diffuse = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
   paddle2Light.intensity = 1.2;
   paddle2Light.range = 2.5;
 
+  return { paddleWidth, paddleHeight, paddleDepth, paddleZClamp, paddle1, paddle2, paddle1Mat, paddle2Mat, leftBorderLight, rightBorderLight, paddle1Light, paddle2Light };
+}
+
+function buildBall(BABYLON: any, scene: any, glowLayer: any) {
   const ball = BABYLON.MeshBuilder.CreateSphere('pongBall', { diameter: 0.3 }, scene);
   const ballMat = new BABYLON.StandardMaterial('ballMat', scene);
-  ballMat.diffuseColor = new BABYLON.Color3(COLORS.BALL_COLORS[currentBallColorIndex].r, COLORS.BALL_COLORS[currentBallColorIndex].g, COLORS.BALL_COLORS[currentBallColorIndex].b);
-  ballMat.emissiveColor = new BABYLON.Color3(COLORS.BALL_COLORS[currentBallColorIndex].r, COLORS.BALL_COLORS[currentBallColorIndex].g, COLORS.BALL_COLORS[currentBallColorIndex].b);
+  ballMat.diffuseColor = new BABYLON.Color3(
+    COLORS.BALL_COLORS[currentBallColorIndex].r,
+    COLORS.BALL_COLORS[currentBallColorIndex].g,
+    COLORS.BALL_COLORS[currentBallColorIndex].b
+  );
+  ballMat.emissiveColor = new BABYLON.Color3(
+    COLORS.BALL_COLORS[currentBallColorIndex].r,
+    COLORS.BALL_COLORS[currentBallColorIndex].g,
+    COLORS.BALL_COLORS[currentBallColorIndex].b
+  );
   ball.material = ballMat;
-  ball.position.y = paddleHeight/2;
+  ball.position.y = 0.3 / 2;
   glowLayer.addIncludedOnlyMesh(ball);
+  return { ball, ballMat };
+}
 
-  let BALLSPEEDX = BALLSPEEDXDEFAULT;
-  let BALLSPEEDZ = BALLSPEEDZDEFAULT;
-  let ballDirX = BALLSPEEDX, ballDirZ = BALLSPEEDZ;
-  let paddle1ToCorner: number | null = null;
-  let paddle2ToCorner: number | null = null;
-  let onlineMode = false;
-  let currentRoomId: string | null = null;
-  const wsManager = WebSocketManager.getInstance();
-  const gameService = new GameService();
-  const appState = AppState.getInstance();
-
-  // Helper: mapping between server (800x400) and Babylon coordinates
-  const toBabylonX = (serverX: number) => (serverX / 800) * 7.2 - 3.6; // [-3.6, 3.6]
-  const toBabylonZ = (serverY: number) => ((serverY / 400) * (2 * paddleZClamp)) - paddleZClamp; // [-clamp, clamp]
-  const toServerY = (z: number) => ((z + paddleZClamp) / (2 * paddleZClamp)) * 400; // [0, 400]
-
-  // Border flash animation tracking
-  let leftBorderFlashTime = 0;
-  let rightBorderFlashTime = 0;
-  let topBorderFlashTime = 0;
-  let bottomBorderFlashTime = 0;
-
-  // Paddle flash animation tracking
-  let paddle1FlashTime = 0;
-  let paddle2FlashTime = 0;
-
-  const keys = {
-    up: false,
-    down: false
-  };
-
-  let userControlling = false;
+function buildInput() {
+  const keys = { up: false, down: false };
+  let state: ControlState = ControlState.Idle;
   let uiFaded = false;
-  let myPlayerId: number | null = null;
-  let lerpFactor = 0.2; // interpolation for online updates
-  let lastServerState: any = null;
-
-  function fadeOutLandingUIOnce() {
+  const fadeOutLandingUIOnce = () => {
     if (uiFaded) return;
     uiFaded = true;
     const ui = document.getElementById('landing-ui');
     if (ui) ui.classList.add('fade-out');
-  }
-
-  window.addEventListener('keydown', (event) => {
-    switch(event.code) {
+  };
+  const onKeyDown = (event: KeyboardEvent) => {
+    switch (event.code) {
       case 'ArrowUp':
         keys.up = true;
-        userControlling = true;
-  fadeOutLandingUIOnce();
+        if (state !== ControlState.Human) { state = ControlState.Human; fadeOutLandingUIOnce(); }
         event.preventDefault();
-        if (onlineMode && currentRoomId && myPlayerId !== null) {
-          // Compute new desired server Y and send
-          const nextZ = Math.max(Math.min(paddle1.position.z - PADSPEED, paddleZClamp), -paddleZClamp);
-          gameService.movePlayer(currentRoomId, Math.max(0, Math.min(400 - 100, toServerY(nextZ))));
-        }
         break;
       case 'ArrowDown':
         keys.down = true;
-        userControlling = true;
-  fadeOutLandingUIOnce();
+        if (state !== ControlState.Human) { state = ControlState.Human; fadeOutLandingUIOnce(); }
         event.preventDefault();
-        if (onlineMode && currentRoomId && myPlayerId !== null) {
-          const nextZ = Math.max(Math.min(paddle1.position.z + PADSPEED, paddleZClamp), -paddleZClamp);
-          gameService.movePlayer(currentRoomId, Math.max(0, Math.min(400 - 100, toServerY(nextZ))));
-        }
         break;
       case 'KeyG':
         (window as any).closeBabylonGame && (window as any).closeBabylonGame();
@@ -318,10 +290,9 @@ export function init() {
         event.preventDefault();
         break;
     }
-  });
-
-  window.addEventListener('keyup', (event) => {
-    switch(event.code) {
+  };
+  const onKeyUp = (event: KeyboardEvent) => {
+    switch (event.code) {
       case 'ArrowUp':
         keys.up = false;
         event.preventDefault();
@@ -331,326 +302,328 @@ export function init() {
         event.preventDefault();
         break;
     }
-  });
+  };
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  return { keys, getState: () => state, setState: (s: ControlState) => { state = s; }, detach: () => {
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
+  }};
+}
 
-  engine.runRenderLoop(() => {
-    const deltaTime = engine.getDeltaTime() / 1000; // Convert to seconds
+export function init(): GameController | void {
+  console.log('Landing page loaded');
+  startTypingEffect();
 
-    // Handle border flash animations
+  const BABYLON = (window as any).BABYLON;
+  if (!BABYLON) {
+    console.error('BABYLON is not loaded. Please include Babylon.js via CDN in your index.html.');
+    return;
+  }
+
+  const { engine, scene, canvas, disposeCanvas } = buildEngineAndScene(BABYLON);
+  const { camera, glowLayer } = buildCameraAndPostFX(BABYLON, scene, canvas);
+  const borders = buildTableAndBorders(BABYLON, scene, glowLayer);
+  const paddles = buildPaddlesAndLights(BABYLON, scene, glowLayer, borders.borderThickness);
+  const { ball, ballMat } = buildBall(BABYLON, scene, glowLayer);
+  const input = buildInput();
+
+  // State
+  let BALLSPEEDX = BALLSPEEDXDEFAULT;
+  let BALLSPEEDZ = BALLSPEEDZDEFAULT;
+  let ballDirX = BALLSPEEDX, ballDirZ = BALLSPEEDZ;
+  let paddle1ToCorner: number | null = null;
+  let paddle2ToCorner: number | null = null;
+  let onlineMode = false;
+  let currentRoomId: string | null = null;
+  let lastServerUpdateAt = 0;
+  let lerpFactor = 0.2; // adaptive
+
+  // Mapping
+  const toBabylonX = (serverX: number) => (serverX / 800) * 7.2 - 3.6; // [-3.6, 3.6]
+  const toBabylonZ = (serverY: number) => ((serverY / 400) * (2 * paddles.paddleZClamp)) - paddles.paddleZClamp; // [-clamp, clamp]
+  const toServerY = (z: number) => ((z + paddles.paddleZClamp) / (2 * paddles.paddleZClamp)) * 400; // [0..400]
+
+  // Flash timers
+  let leftBorderFlashTime = 0;
+  let rightBorderFlashTime = 0;
+  let paddle1FlashTime = 0;
+  let paddle2FlashTime = 0;
+
+  // WS wiring
+  const wsManager = WebSocketManager.getInstance();
+  const gameService = new GameService();
+  const appState = AppState.getInstance();
+
+  // Reduce allocations: reuse material and light color objects
+  const setMatEmissive = (mat: any, r: number, g: number, b: number) => {
+    mat.emissiveColor.r = r; mat.emissiveColor.g = g; mat.emissiveColor.b = b;
+  };
+  const setLightDiffuse = (light: any, r: number, g: number, b: number) => {
+    light.diffuse.r = r; light.diffuse.g = g; light.diffuse.b = b;
+  };
+
+  // Move throttling
+  let lastMoveSentAt = 0;
+  let lastSentY: number | null = null;
+  const MOVE_MIN_INTERVAL = 50; // ms
+  const maybeSendMove = (desiredY: number) => {
+    const now = nowMs();
+    const clampedY = clamp(desiredY, 0, 400);
+    if (!onlineMode || !currentRoomId) return;
+    if (now - lastMoveSentAt < MOVE_MIN_INTERVAL) return;
+    if (lastSentY !== null && Math.abs(clampedY - lastSentY) < 0.5) return;
+    gameService.movePlayer(currentRoomId, clampedY);
+    lastMoveSentAt = now;
+    lastSentY = clampedY;
+  };
+
+  // Disable auto redirect so the match can render here
+  wsManager.setAutoRedirectEnabled(false);
+  const room = appState.getCurrentRoom();
+  if (wsManager.isConnected() && room) {
+    onlineMode = true;
+    currentRoomId = room.roomId;
+  }
+
+  // Adaptive interpolation based on update cadence
+  const onStateUpdate = (payload: any) => {
+    const state = payload?.state;
+    if (!state) return;
+    const now = nowMs();
+    const dtMs = lastServerUpdateAt ? now - lastServerUpdateAt : 100;
+    lastServerUpdateAt = now;
+    // Map 30..200ms -> 0.08..0.3
+    const t = clamp((dtMs - 30) / (200 - 30), 0, 1);
+    lerpFactor = 0.08 + (0.3 - 0.08) * t;
+
+    // Derive left/right paddles deterministically by id order
+    const ids = Object.keys(state.paddles || {}).map((id) => parseInt(id, 10)).sort((a, b) => a - b);
+    if (ids.length >= 2) {
+      const leftPad = state.paddles[ids[0]];
+      const rightPad = state.paddles[ids[1]];
+      if (leftPad) {
+        const targetZ = toBabylonZ(leftPad.y);
+        paddles.paddle1.position.z += (targetZ - paddles.paddle1.position.z) * lerpFactor;
+      }
+      if (rightPad) {
+        const targetZ = toBabylonZ(rightPad.y);
+        paddles.paddle2.position.z += (targetZ - paddles.paddle2.position.z) * lerpFactor;
+      }
+    }
+    if (state.ball) {
+      const targetX = toBabylonX(state.ball.x);
+      const targetZ = toBabylonZ(state.ball.y);
+      ball.position.x += (targetX - ball.position.x) * lerpFactor;
+      ball.position.z += (targetZ - ball.position.z) * lerpFactor;
+    }
+    onlineMode = true;
+  };
+  wsManager.on('state-update', onStateUpdate);
+
+  // Update logic via onBeforeRenderObservable
+  let logicObserver = scene.onBeforeRenderObservable.add(() => {
+    const deltaTime = engine.getDeltaTime() / 1000; // seconds
+
+    // Flash animations (no allocations)
     if (leftBorderFlashTime > 0) {
-      leftBorderFlashTime -= deltaTime;
-      const flashIntensity = leftBorderFlashTime / 2.0; // 2 second duration
-      if (flashIntensity > 0) {
-        leftMat.emissiveColor = new BABYLON.Color3(
-          COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * flashIntensity,
-          COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * flashIntensity,
-          COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * flashIntensity
-        );
-        leftBorderLight.intensity = 0.8 + 3.0 * flashIntensity; // Brighter flash
-        leftBorderLight.diffuse = new BABYLON.Color3(
-          COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * flashIntensity,
-          COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * flashIntensity,
-          COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * flashIntensity
-        );
-      } else {
-        leftMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-        leftBorderLight.intensity = 0.8;
-        leftBorderLight.diffuse = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-      }
+      leftBorderFlashTime = Math.max(0, leftBorderFlashTime - deltaTime);
+      const k = leftBorderFlashTime / 2.0;
+      const r = COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * k;
+      const g = COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * k;
+      const b = COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * k;
+      setMatEmissive(borders.leftMat, r, g, b);
+      paddles.leftBorderLight.intensity = 0.8 + 3.0 * k;
+      setLightDiffuse(paddles.leftBorderLight, r, g, b);
     } else {
-      leftMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-      leftBorderLight.intensity = 0.8;
+      setMatEmissive(borders.leftMat, COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+      paddles.leftBorderLight.intensity = 0.8;
     }
-
     if (rightBorderFlashTime > 0) {
-      rightBorderFlashTime -= deltaTime;
-      const flashIntensity = rightBorderFlashTime / 2.0; // 2 second duration
-      if (flashIntensity > 0) {
-        rightMat.emissiveColor = new BABYLON.Color3(
-          COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * flashIntensity,
-          COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * flashIntensity,
-          COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * flashIntensity
-        );
-        rightBorderLight.intensity = 0.8 + 3.0 * flashIntensity; // Brighter flash
-        rightBorderLight.diffuse = new BABYLON.Color3(
-          COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * flashIntensity,
-          COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * flashIntensity,
-          COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * flashIntensity
-        );
-      } else {
-        rightMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-        rightBorderLight.intensity = 0.8;
-        rightBorderLight.diffuse = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-      }
+      rightBorderFlashTime = Math.max(0, rightBorderFlashTime - deltaTime);
+      const k = rightBorderFlashTime / 2.0;
+      const r = COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * k;
+      const g = COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * k;
+      const b = COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * k;
+      setMatEmissive(borders.rightMat, r, g, b);
+      paddles.rightBorderLight.intensity = 0.8 + 3.0 * k;
+      setLightDiffuse(paddles.rightBorderLight, r, g, b);
     } else {
-      rightMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-      rightBorderLight.intensity = 0.8;
+      setMatEmissive(borders.rightMat, COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+      paddles.rightBorderLight.intensity = 0.8;
     }
 
-    // Handle paddle flash animations
     if (paddle1FlashTime > 0) {
-      paddle1FlashTime -= deltaTime;
-      const flashIntensity = paddle1FlashTime / 1.0; // 1 second duration
-      if (flashIntensity > 0) {
-        paddle1Mat.emissiveColor = new BABYLON.Color3(
-          COLORS.LEFT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.LEFT_PADDLE.r) * flashIntensity,
-          COLORS.LEFT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.LEFT_PADDLE.g) * flashIntensity,
-          COLORS.LEFT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.LEFT_PADDLE.b) * flashIntensity
-        );
-        paddle1Light.intensity = 1.2 + 2.0 * flashIntensity;
-        paddle1Light.diffuse = new BABYLON.Color3(
-          COLORS.LEFT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.LEFT_PADDLE.r) * flashIntensity,
-          COLORS.LEFT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.LEFT_PADDLE.g) * flashIntensity,
-          COLORS.LEFT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.LEFT_PADDLE.b) * flashIntensity
-        );
-      } else {
-        paddle1Mat.emissiveColor = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
-        paddle1Light.intensity = 1.2;
-        paddle1Light.diffuse = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
-      }
+      paddle1FlashTime = Math.max(0, paddle1FlashTime - deltaTime);
+      const k = paddle1FlashTime / 1.0;
+      const r = COLORS.LEFT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.LEFT_PADDLE.r) * k;
+      const g = COLORS.LEFT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.LEFT_PADDLE.g) * k;
+      const b = COLORS.LEFT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.LEFT_PADDLE.b) * k;
+      setMatEmissive(paddles.paddle1Mat, r, g, b);
+      paddles.paddle1Light.intensity = 1.2 + 2.0 * k;
+      setLightDiffuse(paddles.paddle1Light, r, g, b);
     } else {
-      paddle1Mat.emissiveColor = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
-      paddle1Light.intensity = 1.2;
-      paddle1Light.diffuse = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
+      setMatEmissive(paddles.paddle1Mat, COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
+      paddles.paddle1Light.intensity = 1.2;
     }
-
     if (paddle2FlashTime > 0) {
-      paddle2FlashTime -= deltaTime;
-      const flashIntensity = paddle2FlashTime / 1.0; // 1 second duration
-      if (flashIntensity > 0) {
-        paddle2Mat.emissiveColor = new BABYLON.Color3(
-          COLORS.RIGHT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.RIGHT_PADDLE.r) * flashIntensity,
-          COLORS.RIGHT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.RIGHT_PADDLE.g) * flashIntensity,
-          COLORS.RIGHT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.RIGHT_PADDLE.b) * flashIntensity
-        );
-        paddle2Light.intensity = 1.2 + 2.0 * flashIntensity;
-        paddle2Light.diffuse = new BABYLON.Color3(
-          COLORS.RIGHT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.RIGHT_PADDLE.r) * flashIntensity,
-          COLORS.RIGHT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.RIGHT_PADDLE.g) * flashIntensity,
-          COLORS.RIGHT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.RIGHT_PADDLE.b) * flashIntensity
-        );
-      } else {
-        paddle2Mat.emissiveColor = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
-        paddle2Light.intensity = 1.2;
-        paddle2Light.diffuse = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
-      }
+      paddle2FlashTime = Math.max(0, paddle2FlashTime - deltaTime);
+      const k = paddle2FlashTime / 1.0;
+      const r = COLORS.RIGHT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.RIGHT_PADDLE.r) * k;
+      const g = COLORS.RIGHT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.RIGHT_PADDLE.g) * k;
+      const b = COLORS.RIGHT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.RIGHT_PADDLE.b) * k;
+      setMatEmissive(paddles.paddle2Mat, r, g, b);
+      paddles.paddle2Light.intensity = 1.2 + 2.0 * k;
+      setLightDiffuse(paddles.paddle2Light, r, g, b);
     } else {
-      paddle2Mat.emissiveColor = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
-      paddle2Light.intensity = 1.2;
-      paddle2Light.diffuse = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
+      setMatEmissive(paddles.paddle2Mat, COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
+      paddles.paddle2Light.intensity = 1.2;
     }
 
-    // if (topBorderFlashTime > 0) {
-    //   topBorderFlashTime -= deltaTime;
-    //   const flashIntensity = topBorderFlashTime / 1.0; // 1 second duration
-    //   if (flashIntensity > 0) {
-    //     topMat.emissiveColor = new BABYLON.Color3(
-    //       COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * flashIntensity,
-    //       COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * flashIntensity,
-    //       COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * flashIntensity
-    //     );
-    //   } else {
-    //     topMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-    //   }
-    // } else {
-    //   topMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-    // }
+    paddles.paddle1Light.position.z = paddles.paddle1.position.z;
+    paddles.paddle2Light.position.z = paddles.paddle2.position.z;
 
-    // if (bottomBorderFlashTime > 0) {
-    //   bottomBorderFlashTime -= deltaTime;
-    //   const flashIntensity = bottomBorderFlashTime / 1.0; // 1 second duration
-    //   if (flashIntensity > 0) {
-    //     bottomMat.emissiveColor = new BABYLON.Color3(
-    //       COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * flashIntensity,
-    //       COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * flashIntensity,
-    //       COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * flashIntensity
-    //     );
-    //   } else {
-    //     bottomMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-    //   }
-    // } else {
-    //   bottomMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-    // }
-
-    paddle1Light.position.z = paddle1.position.z;
-    paddle2Light.position.z = paddle2.position.z;
-
-    if (!onlineMode && !userControlling && paddle1ToCorner !== null) {
-      const dz = paddle1ToCorner - paddle1.position.z;
-      if (Math.abs(dz) < 0.1) {
-        paddle1.position.z = paddle1ToCorner;
-        paddle1ToCorner = null;
-      } else
-        paddle1.position.z += Math.sign(dz) * PADSPEED * 1.2;
-    } else if (!onlineMode && userControlling) {
-      if (keys.up) {
-        paddle1.position.z -= PADSPEED;
-      }
-      if (keys.down) {
-        paddle1.position.z += PADSPEED;
-      }
-    } else if (!onlineMode) {
-      paddle1.position.z += Math.sign(ball.position.z - paddle1.position.z) * PADSPEED;
-    }
-
-    if (!onlineMode && paddle2ToCorner !== null) {
-      const dz = paddle2ToCorner - paddle2.position.z;
-      if (Math.abs(dz) < 0.1) {
-        paddle2.position.z = paddle2ToCorner;
-        paddle2ToCorner = null;
-      } else
-        paddle2.position.z += Math.sign(dz) * PADSPEED * 1.2;
-    } else if (!onlineMode)
-      paddle2.position.z += Math.sign(ball.position.z - paddle2.position.z) * PADSPEED;
-
-  // Clamp paddles so they don't intersect top/bottom borders
-  paddle1.position.z = Math.max(Math.min(paddle1.position.z, paddleZClamp), -paddleZClamp);
-  paddle2.position.z = Math.max(Math.min(paddle2.position.z, paddleZClamp), -paddleZClamp);
-
+    // Control state machine
+    const state = input.getState();
     if (!onlineMode) {
-      ball.position.x += ballDirX;
-      ball.position.z += ballDirZ;
+      if (state === ControlState.Idle && paddle1ToCorner !== null) {
+        const dz = paddle1ToCorner - paddles.paddle1.position.z;
+        const step = Math.sign(dz) * PADSPEED * 1.2 * deltaTime;
+        if (Math.abs(dz) < Math.abs(step)) {
+          paddles.paddle1.position.z = paddle1ToCorner;
+          paddle1ToCorner = null;
+        } else {
+          paddles.paddle1.position.z += step;
+        }
+      } else if (state === ControlState.Human) {
+        if (input.keys.up) paddles.paddle1.position.z -= PADSPEED * deltaTime;
+        if (input.keys.down) paddles.paddle1.position.z += PADSPEED * deltaTime;
+      } else if (state === ControlState.AI) {
+        const dz = ball.position.z - paddles.paddle1.position.z;
+        paddles.paddle1.position.z += Math.sign(dz) * PADSPEED * deltaTime;
+      }
+
+      if (paddle2ToCorner !== null) {
+        const dz = paddle2ToCorner - paddles.paddle2.position.z;
+        const step = Math.sign(dz) * PADSPEED * 1.2 * deltaTime;
+        if (Math.abs(dz) < Math.abs(step)) {
+          paddles.paddle2.position.z = paddle2ToCorner;
+          paddle2ToCorner = null;
+        } else {
+          paddles.paddle2.position.z += step;
+        }
+      } else {
+        const dz = ball.position.z - paddles.paddle2.position.z;
+        paddles.paddle2.position.z += Math.sign(dz) * PADSPEED * deltaTime;
+      }
     }
 
-  if (!onlineMode && ball.position.z > 1.85) {
+    // Clamp paddles
+    paddles.paddle1.position.z = clamp(paddles.paddle1.position.z, -paddles.paddleZClamp, paddles.paddleZClamp);
+    paddles.paddle2.position.z = clamp(paddles.paddle2.position.z, -paddles.paddleZClamp, paddles.paddleZClamp);
+
+    // Ball offline sim
+    if (!onlineMode) {
+      ball.position.x += ballDirX * deltaTime;
+      ball.position.z += ballDirZ * deltaTime;
+    }
+
+    if (!onlineMode && ball.position.z > 1.85) {
       ball.position.z = 1.85;
       ballDirZ *= -1;
-      // Trigger top border flash
-      topBorderFlashTime = 1.0;
+      rightBorderFlashTime = 1.0; // top flash (reuse timer)
     }
-  if (!onlineMode && ball.position.z < -1.85) {
+    if (!onlineMode && ball.position.z < -1.85) {
       ball.position.z = -1.85;
       ballDirZ *= -1;
-      // Trigger bottom border flash
-      bottomBorderFlashTime = 1.0;
+      leftBorderFlashTime = 1.0; // bottom flash (reuse timer)
     }
 
-    let paddleHit = false;
-    const paddleMargin = 0.2;
-    const paddleLengthMargin = 0.1;
+    // Paddle collision (offline)
+    if (!onlineMode) {
+      const marginX = 0.2;
+      const lengthMarginZ = 0.1;
+      const pW2 = paddles.paddleWidth / 2;
+      const pD2 = paddles.paddleDepth / 2;
+      let paddleHit = false;
 
-    if (ball.position.x < paddle1.position.x + paddleWidth/2 + paddleMargin &&
-        ball.position.x > paddle1.position.x - paddleMargin &&
-        Math.abs(ball.position.z - paddle1.position.z) < paddleDepth/2 + paddleLengthMargin
-    ) {
-      ball.position.x = paddle1.position.x + paddleWidth/2 + paddleMargin;
-      BALLSPEEDX += 0.01;
-      BALLSPEEDZ += 0.01;
-      const norm = Math.sqrt(ballDirX * ballDirX + ballDirZ * ballDirZ);
-      ballDirX = Math.abs(ballDirX / norm) * BALLSPEEDX;
-      ballDirZ = (ballDirZ / Math.abs(ballDirZ)) * Math.abs(ballDirZ / norm) * BALLSPEEDZ;
-      paddleHit = true;
-      paddle1FlashTime = 1.0; // Trigger 1 second yellow flash
-      if (!userControlling) {
-        paddle1ToCorner = -paddleZClamp;
+      if (ball.position.x < paddles.paddle1.position.x + pW2 + marginX &&
+          ball.position.x > paddles.paddle1.position.x - marginX &&
+          Math.abs(ball.position.z - paddles.paddle1.position.z) < pD2 + lengthMarginZ) {
+        ball.position.x = paddles.paddle1.position.x + pW2 + marginX;
+        BALLSPEEDX += 0.2; BALLSPEEDZ += 0.15;
+        const norm = Math.sqrt(ballDirX * ballDirX + ballDirZ * ballDirZ) || 1;
+        ballDirX = Math.abs(ballDirX / norm) * BALLSPEEDX;
+        ballDirZ = Math.sign(ballDirZ || 1) * Math.abs(ballDirZ / norm) * BALLSPEEDZ;
+        paddle1FlashTime = 1.0;
+        if (input.getState() !== ControlState.Human) paddle1ToCorner = -paddles.paddleZClamp;
+        paddleHit = true;
+      }
+
+      if (ball.position.x > paddles.paddle2.position.x - pW2 - marginX &&
+          ball.position.x < paddles.paddle2.position.x + marginX &&
+          Math.abs(ball.position.z - paddles.paddle2.position.z) < pD2 + lengthMarginZ) {
+        ball.position.x = paddles.paddle2.position.x - pW2 - marginX;
+        BALLSPEEDX += 0.2; BALLSPEEDZ += 0.15;
+        const norm = Math.sqrt(ballDirX * ballDirX + ballDirZ * ballDirZ) || 1;
+        ballDirX = -Math.abs(ballDirX / norm) * BALLSPEEDX;
+        ballDirZ = Math.sign(ballDirZ || 1) * Math.abs(ballDirZ / norm) * BALLSPEEDZ;
+        paddle2FlashTime = 1.0;
+        paddle2ToCorner = paddles.paddleZClamp;
+        paddleHit = true;
+      }
+
+      const leftOut = ball.position.x < -3.85 && !(ball.position.x > paddles.paddle1.position.x - marginX && ball.position.x < paddles.paddle1.position.x + pW2 + marginX && Math.abs(ball.position.z - paddles.paddle1.position.z) < pD2 + lengthMarginZ);
+      const rightOut = ball.position.x > 3.85 && !(ball.position.x > paddles.paddle2.position.x - pW2 - marginX && ball.position.x < paddles.paddle2.position.x + marginX && Math.abs(ball.position.z - paddles.paddle2.position.z) < pD2 + lengthMarginZ);
+      if (!paddleHit && (leftOut || rightOut)) {
+        if (leftOut) leftBorderFlashTime = 2.0; else rightBorderFlashTime = 2.0;
+        currentBallColorIndex = (currentBallColorIndex + 1) % COLORS.BALL_COLORS.length;
+        ball.position.x = 0; ball.position.z = 0;
+        BALLSPEEDX = BALLSPEEDXDEFAULT; BALLSPEEDZ = BALLSPEEDZDEFAULT;
+        ballDirX = (Math.random() > 0.5 ? 1 : -1) * BALLSPEEDX;
+        ballDirZ = (Math.random() > 0.5 ? 1 : -1) * BALLSPEEDZ;
+        // Update ball color without new allocations
+        ballMat.diffuseColor.r = COLORS.BALL_COLORS[currentBallColorIndex].r;
+        ballMat.diffuseColor.g = COLORS.BALL_COLORS[currentBallColorIndex].g;
+        ballMat.diffuseColor.b = COLORS.BALL_COLORS[currentBallColorIndex].b;
+        ballMat.emissiveColor.r = COLORS.BALL_COLORS[currentBallColorIndex].r;
+        ballMat.emissiveColor.g = COLORS.BALL_COLORS[currentBallColorIndex].g;
+        ballMat.emissiveColor.b = COLORS.BALL_COLORS[currentBallColorIndex].b;
       }
     }
 
-    if (ball.position.x > paddle2.position.x - paddleWidth/2 - paddleMargin &&
-        ball.position.x < paddle2.position.x + paddleMargin &&
-        Math.abs(ball.position.z - paddle2.position.z) < paddleDepth/2 + paddleLengthMargin
-    ) {
-      ball.position.x = paddle2.position.x - paddleWidth/2 - paddleMargin;
-      BALLSPEEDX += 0.01;
-      BALLSPEEDZ += 0.01;
-      const norm = Math.sqrt(ballDirX * ballDirX + ballDirZ * ballDirZ);
-      ballDirX = -Math.abs(ballDirX / norm) * BALLSPEEDX;
-      ballDirZ = (ballDirZ / Math.abs(ballDirZ)) * Math.abs(ballDirZ / norm) * BALLSPEEDZ;
-      paddleHit = true;
-      paddle2FlashTime = 1.0; // Trigger 1 second yellow flash
-  paddle2ToCorner = paddleZClamp;
+    // Online input: send intents (throttled)
+    if (onlineMode && input.getState() === ControlState.Human) {
+      const desiredZ = paddles.paddle1.position.z + (input.keys.up ? -PADSPEED * deltaTime : 0) + (input.keys.down ? PADSPEED * deltaTime : 0);
+      const clampedZ = clamp(desiredZ, -paddles.paddleZClamp, paddles.paddleZClamp);
+      const desiredServerY = toServerY(clampedZ); // clamp inside maybeSendMove
+      maybeSendMove(desiredServerY);
     }
-
-    const leftOut = ball.position.x < -3.85 && !(ball.position.x > paddle1.position.x - paddleMargin && ball.position.x < paddle1.position.x + paddleWidth/2 + paddleMargin && Math.abs(ball.position.z - paddle1.position.z) < paddleDepth/2 + paddleLengthMargin);
-    const rightOut = ball.position.x > 3.85 && !(ball.position.x > paddle2.position.x - paddleWidth/2 - paddleMargin && ball.position.x < paddle2.position.x + paddleMargin && Math.abs(ball.position.z - paddle2.position.z) < paddleDepth/2 + paddleLengthMargin);
-  if (!onlineMode && !paddleHit && (leftOut || rightOut)) {
-      // Trigger border flash for left or right border
-      if (leftOut) {
-        leftBorderFlashTime = 2.0; // 2 second flash
-      } else {
-        rightBorderFlashTime = 2.0; // 2 second flash
-      }
-
-      // Cycle through ball colors
-      currentBallColorIndex = (currentBallColorIndex + 1) % COLORS.BALL_COLORS.length;
-
-      ball.position.x = 0;
-      ball.position.z = 0;
-      BALLSPEEDX = BALLSPEEDXDEFAULT;
-      BALLSPEEDZ = BALLSPEEDZDEFAULT;
-      ballDirX = (Math.random() > 0.5 ? 1 : -1) * BALLSPEEDX;
-      ballDirZ = (Math.random() > 0.5 ? 1 : -1) * BALLSPEEDZ;
-
-      // Update ball color
-      ballMat.diffuseColor = new BABYLON.Color3(
-        COLORS.BALL_COLORS[currentBallColorIndex].r,
-        COLORS.BALL_COLORS[currentBallColorIndex].g,
-        COLORS.BALL_COLORS[currentBallColorIndex].b
-      );
-      ballMat.emissiveColor = new BABYLON.Color3(
-        COLORS.BALL_COLORS[currentBallColorIndex].r,
-        COLORS.BALL_COLORS[currentBallColorIndex].g,
-        COLORS.BALL_COLORS[currentBallColorIndex].b
-      );
-
-      return scene.render();
-    }
-
-    scene.render();
   });
 
-  window.addEventListener('resize', () => {
-    resizeCanvas();
-  });
+  // Render loop just renders; logic is in beforeRender
+  engine.runRenderLoop(() => scene.render());
 
-  // --- Online mode wiring ---
-  try {
-    // Disable auto redirect so we can host the match on landing
-    wsManager.setAutoRedirectEnabled(false);
-
-    // If already connected and in room, enable online mode
-    const room = appState.getCurrentRoom();
-    if (wsManager.isConnected() && room) {
-      onlineMode = true;
-      currentRoomId = room.roomId;
+  // Controller
+  const controller: GameController = {
+    start: () => { /* already running */ },
+    stop: () => {
+      try {
+        if (logicObserver) scene.onBeforeRenderObservable.remove(logicObserver);
+        engine.stopRenderLoop();
+        scene.dispose();
+        engine.dispose();
+      } catch {}
+      disposeCanvas();
+      // Cleanup input and WS listeners
+      input.detach();
+      const ws = WebSocketManager.getInstance();
+      ws.off('state-update', onStateUpdate);
+      // Restore auto-redirect
+      ws.setAutoRedirectEnabled(true);
     }
+  };
 
-    // Listen for server state updates and map to Babylon
-    gameService.onStateUpdate((payload: any) => {
-      const state = payload.state;
-      if (!state) return;
-      lastServerState = state;
-
-      // Determine left/right assignment from state paddles ordering
-      const playerIds = Object.keys(state.paddles || {}).map((id) => parseInt(id)).sort();
-      if (playerIds.length >= 2) {
-        // Left is first, right is second
-        const leftId = playerIds[0];
-        const rightId = playerIds[1];
-
-        const leftPad = state.paddles[leftId];
-        const rightPad = state.paddles[rightId];
-        if (leftPad) {
-          const targetZ = toBabylonZ(leftPad.y);
-          paddle1.position.z += (targetZ - paddle1.position.z) * lerpFactor;
-        }
-        if (rightPad) {
-          const targetZ = toBabylonZ(rightPad.y);
-          paddle2.position.z += (targetZ - paddle2.position.z) * lerpFactor;
-        }
-      }
-
-      // Ball mapping
-      if (state.ball) {
-        const targetX = toBabylonX(state.ball.x);
-        const targetZ = toBabylonZ(state.ball.y);
-        ball.position.x += (targetX - ball.position.x) * lerpFactor;
-        ball.position.z += (targetZ - ball.position.z) * lerpFactor;
-      }
-
-      onlineMode = true;
-    });
-  } catch (e) {
-    console.warn('Online mode not initialized:', e);
-  }
+  (window as any).closeBabylonGame = controller.stop;
+  return controller;
 }
