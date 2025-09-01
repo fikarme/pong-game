@@ -3,205 +3,233 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TOURNAMENT BRACKET - PONG ARENA</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="tournament.css">
+    <title>TOURNAMENT BRACKET</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'neon-green': '#39FF14',
+                        'neon-blue': '#00BFFF',
+                    },
+                    fontFamily: {
+                        'orbitron': ['Orbitron', 'monospace'],
+                    },
+                    boxShadow: {
+                        'neon-green': '0 0 20px rgba(57, 255, 20, 0.5)',
+                        'neon-blue': '0 0 20px rgba(0, 191, 255, 0.5)',
+                        'neon-green-sm': '0 0 10px rgba(57, 255, 20, 0.3)',
+                        'neon-blue-sm': '0 0 10px rgba(0, 191, 255, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes glow {
+            0%, 100% { text-shadow: 0 0 10px #39FF14; }
+            50% { text-shadow: 0 0 20px #39FF14, 0 0 30px #39FF14; }
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 10px rgba(57, 255, 20, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(57, 255, 20, 0.6); }
+        }
+        
+        @keyframes vs-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        .animate-glow { animation: glow 2s ease-in-out infinite alternate; }
+        .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+        .animate-vs-pulse { animation: vs-pulse 2s ease-in-out infinite; }
+    </style>
 </head>
-<body>
-    <div class="tournament-container">
+<body class="bg-black text-neon-green font-orbitron min-h-screen overflow-x-auto">
+    <div class="p-5 max-w-7xl mx-auto">
         <!-- Header -->
-        <div class="tournament-header">
-            <div class="header-grid">
-                <div class="grid-line"></div>
-                <div class="grid-line"></div>
-                <div class="grid-line"></div>
-            </div>
-            <h1 class="tournament-title">
-                <span class="title-bracket">[</span>
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-black text-neon-green animate-glow tracking-widest">
                 TOURNAMENT BRACKET
-                <span class="title-bracket">]</span>
             </h1>
-            <div class="tournament-status">
-                <span class="status-indicator">●</span>
-                <span class="status-text">ACTIVE</span>
-                <span class="tournament-id">ID: 2025-TRN-001</span>
-            </div>
         </div>
 
         <!-- Tournament Bracket -->
-        <div class="bracket-container">
-            <!-- Round 1 - Quarter Finals -->
-            <div class="bracket-round" data-round="1">
-                <div class="round-header">
-                    <span class="round-label">ROUND_01</span>
-                    <span class="round-name">QUARTER_FINALS</span>
+        <div class="flex justify-center items-center space-x-8 py-8 overflow-x-auto">
+            <!-- Quarter Finals -->
+            <div class="flex flex-col space-y-4">
+                <div class="text-center text-neon-blue font-bold text-sm mb-4 tracking-wide">QUARTER FINALS</div>
+                
+                <!-- Match 1 -->
+                <div class="border-2 border-neon-green rounded-lg bg-black bg-opacity-80 p-4 w-64 shadow-neon-green-sm hover:shadow-neon-green transition-all duration-300 cursor-pointer">
+                    <div class="flex items-center justify-between bg-neon-green bg-opacity-20 border border-neon-green rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-neon-green rounded text-xs font-bold flex items-center justify-center text-neon-green animate-pulse-glow">CK</div>
+                            <span class="font-bold text-sm">CYBER_KNIGHT</span>
+                        </div>
+                        <span class="bg-black px-2 py-1 rounded text-neon-green font-bold">15</span>
+                    </div>
+                    <div class="text-center text-neon-blue font-bold my-2 animate-vs-pulse">VS</div>
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-neon-green rounded text-xs font-bold flex items-center justify-center text-neon-green animate-pulse-glow">NG</div>
+                            <span class="font-bold text-sm">NEON_GHOST</span>
+                        </div>
+                        <span class="bg-black px-2 py-1 rounded text-neon-green font-bold">12</span>
+                    </div>
+                    <div class="text-center text-xs bg-neon-green bg-opacity-20 border border-neon-green rounded py-1 font-bold">COMPLETED</div>
                 </div>
-                <div class="matches">
-                    <div class="match" data-match="1">
-                        <div class="player player-1 winner">
-                            <span class="player-name">CYBER_KNIGHT</span>
-                            <span class="player-score">15</span>
-                        </div>
-                        <div class="vs-connector">VS</div>
-                        <div class="player player-2">
-                            <span class="player-name">NEON_GHOST</span>
-                            <span class="player-score">12</span>
-                        </div>
-                        <div class="match-status completed">COMPLETED</div>
-                    </div>
 
-                    <div class="match" data-match="2">
-                        <div class="player player-1 winner">
-                            <span class="player-name">PIXEL_WARRIOR</span>
-                            <span class="player-score">15</span>
+                <!-- Match 2 -->
+                <div class="border-2 border-neon-green rounded-lg bg-black bg-opacity-80 p-4 w-64 shadow-neon-green-sm hover:shadow-neon-green transition-all duration-300 cursor-pointer">
+                    <div class="flex items-center justify-between bg-neon-green bg-opacity-20 border border-neon-green rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-neon-green rounded text-xs font-bold flex items-center justify-center text-neon-green animate-pulse-glow">PW</div>
+                            <span class="font-bold text-sm">PIXEL_WARRIOR</span>
                         </div>
-                        <div class="vs-connector">VS</div>
-                        <div class="player player-2">
-                            <span class="player-name">MATRIX_BLADE</span>
-                            <span class="player-score">9</span>
-                        </div>
-                        <div class="match-status completed">COMPLETED</div>
+                        <span class="bg-black px-2 py-1 rounded text-neon-green font-bold">15</span>
                     </div>
-
-                    <div class="match" data-match="3">
-                        <div class="player player-1">
-                            <span class="player-name">SYNTHWAVE_ACE</span>
-                            <span class="player-score">--</span>
+                    <div class="text-center text-neon-blue font-bold my-2 animate-vs-pulse">VS</div>
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-neon-green rounded text-xs font-bold flex items-center justify-center text-neon-green animate-pulse-glow">MB</div>
+                            <span class="font-bold text-sm">MATRIX_BLADE</span>
                         </div>
-                        <div class="vs-connector">VS</div>
-                        <div class="player player-2">
-                            <span class="player-name">RETRO_FURY</span>
-                            <span class="player-score">--</span>
-                        </div>
-                        <div class="match-status active">IN_PROGRESS</div>
+                        <span class="bg-black px-2 py-1 rounded text-neon-green font-bold">9</span>
                     </div>
-
-                    <div class="match" data-match="4">
-                        <div class="player player-1">
-                            <span class="player-name">ELECTRIC_STORM</span>
-                            <span class="player-score">--</span>
-                        </div>
-                        <div class="vs-connector">VS</div>
-                        <div class="player player-2">
-                            <span class="player-name">NEON_VIPER</span>
-                            <span class="player-score">--</span>
-                        </div>
-                        <div class="match-status pending">PENDING</div>
-                    </div>
+                    <div class="text-center text-xs bg-neon-green bg-opacity-20 border border-neon-green rounded py-1 font-bold">COMPLETED</div>
                 </div>
-            </div>
 
-            <!-- Connection Lines -->
-            <div class="bracket-connectors round-1-to-2">
-                <div class="connector-line"></div>
-                <div class="connector-line"></div>
-                <div class="connector-line"></div>
-                <div class="connector-line"></div>
-            </div>
-
-            <!-- Round 2 - Semi Finals -->
-            <div class="bracket-round" data-round="2">
-                <div class="round-header">
-                    <span class="round-label">ROUND_02</span>
-                    <span class="round-name">SEMI_FINALS</span>
+                <!-- Match 3 -->
+                <div class="border-2 border-neon-blue rounded-lg bg-black bg-opacity-80 p-4 w-64 shadow-neon-blue-sm hover:shadow-neon-blue transition-all duration-300 cursor-pointer animate-pulse">
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-neon-green rounded text-xs font-bold flex items-center justify-center text-neon-green animate-pulse-glow">SA</div>
+                            <span class="font-bold text-sm">SYNTHWAVE_ACE</span>
+                        </div>
+                        <span class="bg-black px-2 py-1 rounded text-neon-green font-bold">--</span>
+                    </div>
+                    <div class="text-center text-neon-blue font-bold my-2 animate-vs-pulse">VS</div>
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-neon-green rounded text-xs font-bold flex items-center justify-center text-neon-green animate-pulse-glow">RF</div>
+                            <span class="font-bold text-sm">RETRO_FURY</span>
+                        </div>
+                        <span class="bg-black px-2 py-1 rounded text-neon-green font-bold">--</span>
+                    </div>
+                    <div class="text-center text-xs bg-neon-blue bg-opacity-20 border border-neon-blue rounded py-1 font-bold animate-pulse">IN PROGRESS</div>
                 </div>
-                <div class="matches">
-                    <div class="match" data-match="5">
-                        <div class="player player-1">
-                            <span class="player-name">CYBER_KNIGHT</span>
-                            <span class="player-score">--</span>
-                        </div>
-                        <div class="vs-connector">VS</div>
-                        <div class="player player-2">
-                            <span class="player-name">PIXEL_WARRIOR</span>
-                            <span class="player-score">--</span>
-                        </div>
-                        <div class="match-status pending">PENDING</div>
-                    </div>
 
-                    <div class="match" data-match="6">
-                        <div class="player player-1">
-                            <span class="player-name">TBD</span>
-                            <span class="player-score">--</span>
+                <!-- Match 4 -->
+                <div class="border-2 border-gray-600 rounded-lg bg-black bg-opacity-80 p-4 w-64 hover:border-neon-green hover:shadow-neon-green-sm transition-all duration-300 cursor-pointer">
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-neon-green rounded text-xs font-bold flex items-center justify-center text-neon-green animate-pulse-glow">ES</div>
+                            <span class="font-bold text-sm">ELECTRIC_STORM</span>
                         </div>
-                        <div class="vs-connector">VS</div>
-                        <div class="player player-2">
-                            <span class="player-name">TBD</span>
-                            <span class="player-score">--</span>
-                        </div>
-                        <div class="match-status pending">PENDING</div>
+                        <span class="bg-black px-2 py-1 rounded text-neon-green font-bold">--</span>
                     </div>
+                    <div class="text-center text-neon-blue font-bold my-2 animate-vs-pulse">VS</div>
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-neon-green rounded text-xs font-bold flex items-center justify-center text-neon-green animate-pulse-glow">NV</div>
+                            <span class="font-bold text-sm">NEON_VIPER</span>
+                        </div>
+                        <span class="bg-black px-2 py-1 rounded text-neon-green font-bold">--</span>
+                    </div>
+                    <div class="text-center text-xs bg-gray-700 bg-opacity-40 border border-gray-600 rounded py-1 font-bold text-gray-400">PENDING</div>
                 </div>
             </div>
 
-            <!-- Connection Lines -->
-            <div class="bracket-connectors round-2-to-final">
-                <div class="connector-line"></div>
-                <div class="connector-line"></div>
+            <!-- Connection Lines to Semi Finals -->
+            <div class="flex flex-col justify-center items-center space-y-8">
+                <div class="w-12 h-1 bg-gradient-to-r from-neon-green via-neon-blue to-neon-green shadow-neon-green-sm relative">
+                    <div class="absolute right-0 top-1/2 transform -translate-y-1/2 w-0 h-0 border-l-4 border-l-neon-green border-t-2 border-t-transparent border-b-2 border-b-transparent"></div>
+                </div>
+                <div class="w-12 h-1 bg-gradient-to-r from-neon-green via-neon-blue to-neon-green shadow-neon-green-sm relative">
+                    <div class="absolute right-0 top-1/2 transform -translate-y-1/2 w-0 h-0 border-l-4 border-l-neon-green border-t-2 border-t-transparent border-b-2 border-b-transparent"></div>
+                </div>
             </div>
 
-            <!-- Final Round -->
-            <div class="bracket-round final-round" data-round="final">
-                <div class="round-header">
-                    <span class="round-label">FINAL</span>
-                    <span class="round-name">CHAMPIONSHIP</span>
-                </div>
-                <div class="matches">
-                    <div class="match final-match" data-match="final">
-                        <div class="player player-1">
-                            <span class="player-name">TBD</span>
-                            <span class="player-score">--</span>
+            <!-- Semi Finals -->
+            <div class="flex flex-col space-y-16">
+                <div class="text-center text-neon-blue font-bold text-sm mb-4 tracking-wide">SEMI FINALS</div>
+                
+                <!-- Semi Final 1 -->
+                <div class="border-2 border-gray-600 rounded-lg bg-black bg-opacity-80 p-4 w-64 hover:border-neon-green hover:shadow-neon-green-sm transition-all duration-300 cursor-pointer">
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-neon-green rounded text-xs font-bold flex items-center justify-center text-neon-green animate-pulse-glow">CK</div>
+                            <span class="font-bold text-sm">CYBER_KNIGHT</span>
                         </div>
-                        <div class="vs-connector final-vs">VS</div>
-                        <div class="player player-2">
-                            <span class="player-name">TBD</span>
-                            <span class="player-score">--</span>
-                        </div>
-                        <div class="match-status pending">PENDING</div>
+                        <span class="bg-black px-2 py-1 rounded text-neon-green font-bold">--</span>
                     </div>
+                    <div class="text-center text-neon-blue font-bold my-2 animate-vs-pulse">VS</div>
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-neon-green rounded text-xs font-bold flex items-center justify-center text-neon-green animate-pulse-glow">PW</div>
+                            <span class="font-bold text-sm">PIXEL_WARRIOR</span>
+                        </div>
+                        <span class="bg-black px-2 py-1 rounded text-neon-green font-bold">--</span>
+                    </div>
+                    <div class="text-center text-xs bg-gray-700 bg-opacity-40 border border-gray-600 rounded py-1 font-bold text-gray-400">PENDING</div>
+                </div>
+
+                <!-- Semi Final 2 -->
+                <div class="border-2 border-gray-600 rounded-lg bg-black bg-opacity-80 p-4 w-64 hover:border-neon-green hover:shadow-neon-green-sm transition-all duration-300 cursor-pointer">
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-700 to-gray-800 border-2 border-gray-600 rounded text-xs font-bold flex items-center justify-center text-gray-400">??</div>
+                            <span class="font-bold text-sm text-gray-400">TBD</span>
+                        </div>
+                        <span class="bg-black px-2 py-1 rounded text-gray-400 font-bold">--</span>
+                    </div>
+                    <div class="text-center text-neon-blue font-bold my-2 animate-vs-pulse">VS</div>
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-2 mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-gray-700 to-gray-800 border-2 border-gray-600 rounded text-xs font-bold flex items-center justify-center text-gray-400">??</div>
+                            <span class="font-bold text-sm text-gray-400">TBD</span>
+                        </div>
+                        <span class="bg-black px-2 py-1 rounded text-gray-400 font-bold">--</span>
+                    </div>
+                    <div class="text-center text-xs bg-gray-700 bg-opacity-40 border border-gray-600 rounded py-1 font-bold text-gray-400">PENDING</div>
+                </div>
+            </div>
+
+            <!-- Connection Lines to Final -->
+            <div class="flex flex-col justify-center items-center">
+                <div class="w-12 h-1 bg-gradient-to-r from-neon-green via-neon-blue to-neon-green shadow-neon-green-sm relative">
+                    <div class="absolute right-0 top-1/2 transform -translate-y-1/2 w-0 h-0 border-l-4 border-l-neon-green border-t-2 border-t-transparent border-b-2 border-b-transparent"></div>
+                </div>
+            </div>
+
+            <!-- Final -->
+            <div class="flex flex-col justify-center">
+                <div class="text-center text-neon-blue font-bold text-sm mb-4 tracking-wide">CHAMPIONSHIP</div>
+                
+                <div class="border-4 border-neon-blue rounded-lg bg-neon-blue bg-opacity-5 p-6 w-72 shadow-neon-blue transition-all duration-300 cursor-pointer">
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-3 mb-3">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-gradient-to-br from-gray-700 to-gray-800 border-2 border-gray-600 rounded text-sm font-bold flex items-center justify-center text-gray-400">??</div>
+                            <span class="font-bold text-gray-400">TBD</span>
+                        </div>
+                        <span class="bg-black px-3 py-2 rounded text-gray-400 font-bold">--</span>
+                    </div>
+                    <div class="text-center text-neon-blue font-bold text-xl my-3 animate-vs-pulse">VS</div>
+                    <div class="flex items-center justify-between bg-black bg-opacity-60 border border-gray-600 rounded p-3 mb-3">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-gradient-to-br from-gray-700 to-gray-800 border-2 border-gray-600 rounded text-sm font-bold flex items-center justify-center text-gray-400">??</div>
+                            <span class="font-bold text-gray-400">TBD</span>
+                        </div>
+                        <span class="bg-black px-3 py-2 rounded text-gray-400 font-bold">--</span>
+                    </div>
+                    <div class="text-center text-sm bg-gray-700 bg-opacity-40 border border-gray-600 rounded py-2 font-bold text-gray-400">PENDING</div>
                 </div>
             </div>
         </div>
-
-        <!-- Tournament Stats -->
-        <div class="tournament-stats">
-            <div class="stat-item">
-                <span class="stat-label">PARTICIPANTS:</span>
-                <span class="stat-value">8</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">MATCHES_COMPLETED:</span>
-                <span class="stat-value">2/7</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">PRIZE_POOL:</span>
-                <span class="stat-value">1000 CREDITS</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">TIME_REMAINING:</span>
-                <span class="stat-value countdown">23:45:12</span>
-            </div>
-        </div>
-
-        <!-- Terminal Footer -->
-        <div class="terminal-footer">
-            <div class="terminal-line">
-                <span class="prompt">root@pong_arena:~$</span>
-                <span class="command">tournament_status --active</span>
-                <span class="cursor">_</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Background Effects -->
-    <div class="background-effects">
-        <div class="grid-overlay"></div>
-        <div class="scan-lines"></div>
-        <div class="glow-orb glow-1"></div>
-        <div class="glow-orb glow-2"></div>
-        <div class="glow-orb glow-3"></div>
     </div>
 
     <script type="module" src="tournament.js"></script>
