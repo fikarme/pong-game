@@ -1,89 +1,14 @@
-<style>
-  :root { --neon: #39FF14; --neon-glow: rgba(57,255,20,0.25); }
+<!-- Styles moved to Tailwind layers (styles/input.css and tailwind.config.js) -->
 
-  html, body { height: 100%; margin: 0; }
-  body {
-    background: radial-gradient(ellipse at center, #010912 0%, #041025 60%);
-    color: var(--neon);
-  }
-
-  .landing-title {
-    display: inline-block;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    line-height: 0.9;
-    font-weight: 900;
-    text-shadow:
-      0 0 6px var(--neon),
-      0 0 18px var(--neon-glow),
-      0 6px 30px rgba(0,0,0,0.6);
-    -webkit-text-stroke: 0.5px rgba(0,0,0,0.35);
-    margin: 0 auto;
-  }
-
-  /* Typing effect sadece caret için CSS */
-  .typing-text {
-    display: inline-block;
-    white-space: nowrap;
-    padding-right: 12px;
-    border-right: 4px solid var(--neon);
-    box-sizing: content-box;
-    animation: caret-blink 1s step-end infinite;
-  }
-  @keyframes caret-blink { 50% { border-color: transparent; } }
-
-  /* Responsive font sizes */
-  @media (max-width: 640px) { .landing-title { font-size: 5rem; } }
-  @media (min-width: 641px) and (max-width: 1024px) { .landing-title { font-size: 8rem; } }
-  @media (min-width: 1025px) { .landing-title { font-size: 12rem; } }
-
-  /* Neon buttons */
-  .neon-btn {
-    background: rgba(0,0,0,0.45);
-    border: 1px solid rgba(57,255,20,0.12);
-    color: var(--neon) !important;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.6), 0 0 18px var(--neon-glow);
-    backdrop-filter: blur(6px);
-    transition: transform 0.2s;
-  }
-  .neon-btn:hover { transform: translateY(-3px) scale(1.05); }
-
-  .or-divider {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    color: var(--neon);
-    opacity: 0.7;
-  }
-  .or-divider::before,
-  .or-divider::after {
-    content: '';
-    width: 40px;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--neon), transparent);
-    box-shadow: 0 0 8px var(--neon-glow);
-  }
-
-  /* Fade out the landing UI when user starts controlling the paddle */
-  #landing-ui { transition: opacity 300ms ease, filter 300ms ease; }
-  #landing-ui.fade-out {
-    opacity: 0;
-    filter: blur(2px);
-    pointer-events: none;
-  }
-</style>
-
-<div id="landing-ui" class="h-screen flex flex-col items-center justify-center">
+<div id="landing-ui" class="h-screen flex flex-col items-center justify-center transition-opacity duration-300 ease-in-out bg-landing-radial">
   <!-- PONG Başlık -->
-  <h1 id="landing-title" class="landing-title" style="margin-bottom: 4rem;" aria-label="PONG">
+  <h1 id="landing-title" class="uppercase tracking-[0.12em] leading-[0.9] font-black text-neon-glow text-stroke-md text-5xl sm:text-8xl lg:text-[12rem] mb-16" aria-label="PONG">
     <span class="typing-text"></span>
   </h1>
 
   <!-- Butonlar -->
   <div class="flex flex-row items-center justify-center gap-8 flex-wrap">
-    <button
-      onclick="window.closeBabylonGame && window.closeBabylonGame(); router.navigate('game')"
+    <button id="btn-play-now"
       class="w-48 rounded-md neon-btn py-3 text-lg sm:text-xl font-bold">
       PLAY NOW!
     </button>
@@ -92,8 +17,7 @@
       <span class="text-sm uppercase tracking-wider">or</span>
     </div>
 
-    <button
-      onclick="window.closeBabylonGame && window.closeBabylonGame(); router.navigate('login')"
+    <button id="btn-login"
       class="w-48 rounded-md neon-btn py-3 text-lg sm:text-xl font-bold">
       LOGIN
     </button>

@@ -1,8 +1,72 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Components: reusable classes implemented via Tailwind pipeline */
+@layer components {
+  .neon-btn {
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(57,255,20,0.12);
+    color: #39FF14 !important;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.6), 0 0 18px rgba(57,255,20,0.25);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    transition: transform 0.2s;
+  }
+  .neon-btn:hover {
+    transform: translateY(-3px) scale(1.05);
+  }
+
+  .or-divider {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: #39FF14;
+    opacity: 0.7;
+  }
+  .or-divider::before,
+  .or-divider::after {
+    content: '';
+    width: 40px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #39FF14, transparent);
+    box-shadow: 0 0 8px rgba(57,255,20,0.25);
+  }
+
+  /* Typing caret */
+  .typing-text {
+    display: inline-block;
+    white-space: nowrap;
+    padding-right: 12px;
+    border-right: 4px solid #39FF14;
+    box-sizing: content-box;
+    animation: caret-blink 1s step-end infinite;
+  }
+  @keyframes caret-blink { 50% { border-color: transparent; } }
+}
+
+/* Utilities: tiny single-purpose helpers */
+@layer utilities {
+  .text-neon-glow {
+  color: #39FF14;
+  -webkit-text-fill-color: #39FF14; /* ensure filled text with stroke */
+    text-shadow:
+      0 0 6px #39FF14,
+      0 0 18px rgba(57,255,20,0.25),
+      0 6px 30px rgba(0,0,0,0.6);
+  }
+  .text-stroke-md {
+    -webkit-text-stroke: 0.5px rgba(0,0,0,0.35);
+  }
+  .fade-out {
+    opacity: 0 !important;
+    filter: blur(2px);
+    pointer-events: none;
+  }
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
 :root {
   --neon: #39FF14;
@@ -11,4 +75,10 @@
 
 body {
   font-family: 'Orbitron', system-ui, sans-serif;
+}
+
+@layer utilities {
+  .bg-landing-radial {
+    background: radial-gradient(ellipse at center, #010912 0%, #041025 60%);
+  }
 }

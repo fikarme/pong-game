@@ -75,3 +75,59 @@ export class Component {
     this.remove();
   }
 }
+
+// Lightweight UI Button built on top of Component
+export interface ButtonOptions extends ComponentOptions {
+  label?: string;
+  onClick?: (ev: MouseEvent) => void;
+  variant?: 'primary' | 'secondary';
+  disabled?: boolean;
+}
+
+export class Button extends Component {
+  private variant: 'primary' | 'secondary';
+
+  constructor(options: ButtonOptions = {}) {
+    const baseClasses = [
+      'w-48',
+      'rounded-md',
+      'py-3',
+      'text-lg',
+      'sm:text-xl',
+      'font-bold',
+      'neon-btn'
+    ].join(' ');
+
+    super({
+      tag: 'button',
+      id: options.id,
+      className: [baseClasses, options.className || ''].join(' ').trim()
+    });
+
+    this.variant = options.variant || 'primary';
+    if (options.label) this.setText(options.label);
+    if (options.onClick) this.onClick(options.onClick);
+    if (options.disabled) this.setDisabled(true);
+  }
+
+  onClick(handler: (ev: MouseEvent) => void): Button {
+    this.on('click', handler as EventListener);
+    this.getElement().setAttribute('data-event-listener', 'click');
+    return this;
+  }
+
+  setLabel(text: string): Button {
+    this.setText(text);
+    return this;
+  }
+
+  setDisabled(disabled: boolean): Button {
+    (this.getElement() as HTMLButtonElement).disabled = disabled;
+    if (disabled) {
+      this.addClass('opacity-50 cursor-not-allowed');
+    } else {
+      this.removeClass('opacity-50 cursor-not-allowed');
+    }
+    return this;
+  }
+}

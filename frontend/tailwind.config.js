@@ -3,6 +3,7 @@ module.exports = {
   content: [
     "./pages/**/*.html",
     "./pages/**/*.ts",
+    "./core/**/*.ts",
     "./index.html",
     "./main.ts"
   ],

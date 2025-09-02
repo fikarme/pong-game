@@ -1,4 +1,5 @@
 import './crtShader.js';
+import { Button } from '../../core/Component.js';
 
 const PADSPEED = 0.09;
 const BALLSPEEDXDEFAULT = 0.09;
@@ -49,6 +50,31 @@ export function init() {
   console.log('Landing page loaded');
 
   startTypingEffect();
+
+  // Wire buttons using our tiny UI component toolkit
+  const playNowBtnEl = document.getElementById('btn-play-now');
+  if (playNowBtnEl) {
+    const playNowBtn = new Button({});
+    playNowBtn.getElement().className = playNowBtnEl.className;
+    playNowBtn.setLabel(playNowBtnEl.textContent || 'PLAY NOW!');
+    playNowBtn.onClick(() => {
+      if ((window as any).closeBabylonGame) (window as any).closeBabylonGame();
+      (window as any).router.navigate('game');
+    });
+    playNowBtnEl.replaceWith(playNowBtn.getElement());
+  }
+
+  const loginBtnEl = document.getElementById('btn-login');
+  if (loginBtnEl) {
+    const loginBtn = new Button({});
+    loginBtn.getElement().className = loginBtnEl.className;
+    loginBtn.setLabel(loginBtnEl.textContent || 'LOGIN');
+    loginBtn.onClick(() => {
+      if ((window as any).closeBabylonGame) (window as any).closeBabylonGame();
+      (window as any).router.navigate('login');
+    });
+    loginBtnEl.replaceWith(loginBtn.getElement());
+  }
 
   const BABYLON = (window as any).BABYLON;
   if (!BABYLON) {
