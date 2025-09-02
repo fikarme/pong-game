@@ -1,5 +1,3 @@
-// CRT shader removed for cleaner look
-// import './crtShader.js';
 import { AppState, RoomInfo } from "../../core/AppState.js";
 import { GameService } from "../../services/GameService.js";
 import { UserService } from "../../services/UserService.js";
@@ -18,36 +16,20 @@ interface GameState {
   gameOver: boolean;
 }
 
-// Enhanced 3D Game constants
-const PONG_3D_CONFIG = {
-  TABLE: { width: 12, height: 0.15, depth: 6 },
-  PADDLE: { width: 0.2, height: 0.4, depth: 1.2 },
-  BALL: { radius: 0.12 },
-  BORDER_THICKNESS: 0.15,
-  CAMERA: {
-    DEFAULT_POSITION: { x: 0, y: 8, z: 6 },
-    MIN_DISTANCE: 5,
-    MAX_DISTANCE: 15,
-    MIN_BETA: 0.1,
-    MAX_BETA: Math.PI / 2 - 0.1
-  },
-  COLORS: {
-    // Enhanced neon color scheme
-    TABLE: { r: 0.05, g: 0.05, b: 0.1 },
-    BORDER: { r: 0, g: 0.8, b: 1 }, // Cyan borders
-    LEFT_PADDLE: { r: 1, g: 0.2, b: 0.3 }, // Neon red
-    RIGHT_PADDLE: { r: 0.2, g: 0.4, b: 1 }, // Neon blue
-    BALL: { r: 1, g: 1, b: 1 }, // Bright white
-    BORDER_FLASH: { r: 1, g: 0, b: 1 }, // Magenta flash
-    PADDLE_FLASH: { r: 1, g: 1, b: 0 }, // Yellow flash
-    SCORE_FLASH: { r: 0, g: 1, b: 0 }, // Green score flash
-    // Particle effects colors
-    PARTICLES: {
-      HIT: { r: 1, g: 1, b: 0 }, // Yellow hit particles
-      SCORE: { r: 0, g: 1, b: 0 }, // Green score particles
-      TRAIL: { r: 0.5, g: 0.8, b: 1 } // Blue trail particles
-    }
-  }
+// Simple 3D game constants
+const TABLE = { width: 12, height: 0.15, depth: 6 };
+const PADDLE = { width: 0.2, height: 0.4, depth: 1.2 };
+const BALL = { radius: 0.12 };
+const BORDER_THICKNESS = 0.35; // Thicker borders
+const COLORS = {
+  TABLE: { r: 0.05, g: 0.05, b: 0.1 },
+  BORDER: { r: 0, g: 0.8, b: 1 }, // Cyan borders
+  LEFT_PADDLE: { r: 1, g: 0.2, b: 0.3 }, // Neon red
+  RIGHT_PADDLE: { r: 0.2, g: 1, b: 0.2 }, // Neon green
+  BALL: { r: 1, g: 1, b: 1 }, // Bright white
+  BORDER_FLASH: { r: 0, g: 1, b: 1 }, // Cyan flash (fixed)
+  PADDLE_FLASH: { r: 1, g: 1, b: 0 }, // Yellow flash
+  SCORE_FLASH: { r: 1, g: 0.5, b: 0 } // Orange score flash
 };
 
 interface Player {
@@ -61,7 +43,6 @@ let engine: any = null;
 let scene: any = null;
 let camera: any = null;
 let glowLayer: any = null;
-// CRT post-process removed for cleaner look
 
 // 3D Game objects
 let table: any = null;
@@ -69,7 +50,6 @@ let borders: any[] = [];
 let paddle1: any = null;
 let paddle2: any = null;
 let ball: any = null;
-let ballTrail: any = null;
 
 // Materials
 let tableMat: any = null;
@@ -78,28 +58,16 @@ let paddle1Mat: any = null;
 let paddle2Mat: any = null;
 let ballMat: any = null;
 
-// Lights and effects
+// Lights
 let mainLight: any = null;
 let paddle1Light: any = null;
 let paddle2Light: any = null;
 let ballLight: any = null;
 let ambientLight: any = null;
 
-// Particle systems
-let hitParticles: any = null;
-let scoreParticles: any = null;
-let ballTrailParticles: any = null;
-
 // Animation tracking
 let borderFlashTimes: number[] = [0, 0, 0, 0]; // left, right, top, bottom
 let paddleFlashTimes: number[] = [0, 0]; // paddle1, paddle2
-let ballColorIndex = 0;
-let lastBallPosition = { x: 0, y: 0, z: 0 };
-
-// Camera controls
-let cameraControlsEnabled = true;
-let lastPointerPosition = { x: 0, y: 0 };
-let isPointerDown = false;
 
 // Game state
 let gameState: GameState | null = null;
@@ -133,13 +101,13 @@ export async function init() {
   // Get canvas elements
   const desktopCanvas = document.getElementById('game-canvas') as HTMLCanvasElement | null;
   const mobileCanvas = document.getElementById('mobile-game-canvas') as HTMLCanvasElement | null;
-  
+
   if (!desktopCanvas && !mobileCanvas) {
     console.error('No canvas found');
     notify('Game canvas not found!');
     return;
   }
-  
+
   // Get UI elements
   const player1NameEl = document.getElementById('player1-name');
   const player2NameEl = document.getElementById('player2-name');
@@ -150,12 +118,12 @@ export async function init() {
   const roomIdEl = document.getElementById('room-id');
   const gameStatusEl = document.getElementById('game-status');
   const leaveGameBtn = document.getElementById('leave-game-btn');
-  
+
   // Pause elements
   const pauseMessageEl = document.getElementById('pause-message');
   const pauseTextEl = document.getElementById('pause-text');
   const pauseCountdownEl = document.getElementById('pause-countdown');
-  
+
   // Mobile elements
   const mobilePlayer1NameEl = document.getElementById('mobile-player1-name');
   const mobilePlayer2NameEl = document.getElementById('mobile-player2-name');
@@ -167,7 +135,7 @@ export async function init() {
   const mobileLeaveBtn = document.getElementById('mobile-leave-btn');
   const mobileUpBtn = document.getElementById('mobile-up-btn');
   const mobileDownBtn = document.getElementById('mobile-down-btn');
-  
+
   // Mobile pause elements
   const mobilePauseMessageEl = document.getElementById('mobile-pause-message');
   const mobilePauseTextEl = document.getElementById('mobile-pause-text');
@@ -187,14 +155,14 @@ export async function init() {
   if (roomIdEl) roomIdEl.textContent = `ROOM: ${currentRoom.roomId}`;
   if (leaveGameBtn) leaveGameBtn.addEventListener('click', handleLeaveGame);
   if (mobileLeaveBtn) mobileLeaveBtn.addEventListener('click', handleLeaveGame);
-  
+
   // Initialize 3D scene
   init3DScene();
-  
+
   // Setup controls
   setupMobileControls();
   setupKeyboardControls();
-  
+
   initPlayerInfo();
   initRoomPlayerNames();
 
@@ -202,7 +170,7 @@ export async function init() {
   gameService.onStateUpdate((data) => {
     if (gameStatusEl) gameStatusEl.textContent = '⚔️ CYBER BATTLE ⚔️';
     if (mobileGameStatusEl) mobileGameStatusEl.textContent = '⚔️ BATTLE ⚔️';
-    
+
     gameState = data.state;
     update3DGameState();
     updateScores();
@@ -273,35 +241,35 @@ export async function init() {
   tournamentService.onTournamentEnded((data: any) => {
     console.log('🏆 Tournament ended during game:', data);
     const isWinner = data.winnerId === myPlayerId;
-    const message = isWinner 
-      ? '🎉 Congratulations! You won the tournament!' 
+    const message = isWinner
+      ? '🎉 Congratulations! You won the tournament!'
       : `🏆 Tournament ended. Winner: ${data.winnerUsername}`;
-    
+
     notify(message);
-    
+
     // Immediately stop the game and clean up
     gameState = null;
     players = [];
     myPlayerId = null;
-    
+
     // Clear mobile control intervals
     if (mobileControlInterval) {
       clearInterval(mobileControlInterval);
       mobileControlInterval = null;
     }
-    
+
     // Clear pause countdown
     if (pauseCountdownTimer) {
       clearTimeout(pauseCountdownTimer);
       pauseCountdownTimer = null;
     }
-    
+
     // Show tournament end result
     setTimeout(() => {
       appState.clearCurrentRoom();
       appState.clearCurrentTournament();
       cleanup3D();
-      
+
       // Store tournament result for end-game page
       localStorage.setItem('tournamentResult', JSON.stringify({
         isWinner,
@@ -309,7 +277,7 @@ export async function init() {
         message: data.message,
         timestamp: Date.now()
       }));
-      
+
       router.navigate('end-game');
     }, 3000);
   });
@@ -323,72 +291,65 @@ export async function init() {
   startCountdown();
 
   function init3DScene() {
-    console.log('🎮 Initializing Enhanced 3D Pong Arena...');
-    
+    console.log('🎮 Initializing 3D Pong scene...');
+
     // If engine already exists, clean it up first
     if (engine) {
       console.log('🧹 Cleaning up existing engine...');
       cleanup3D();
     }
-    
+
     const isMobile = window.innerWidth < 1024;
     const targetCanvas = (isMobile && mobileCanvas) ? mobileCanvas : desktopCanvas;
-    
+
     if (!targetCanvas) {
       console.error('No target canvas available');
       return;
     }
 
-    // Initialize Babylon.js engine with enhanced settings
-    engine = new BABYLON.Engine(targetCanvas, true, { 
-      antialias: true, 
+    // Initialize Babylon.js engine
+    engine = new BABYLON.Engine(targetCanvas, true, {
+      antialias: true,
       adaptToDeviceRatio: true,
       powerPreference: "high-performance",
       stencil: true
     });
-    
+
     scene = new BABYLON.Scene(engine);
     scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
 
-    // Setup fixed camera - 45 degree view from the other side
-    camera = new BABYLON.ArcRotateCamera('camera', 
+    // Fixed camera - keep current 45 degree perspective but remove movement
+    camera = new BABYLON.ArcRotateCamera('camera',
       -Math.PI / 2,          // Alpha: -90 degrees (opposite side view)
       Math.PI / 4,           // Beta: 45 degrees (45 degree angle from top)
       12,                    // Radius: distance from target
       BABYLON.Vector3.Zero(), // Target: center of the table
       scene
     );
-    
-    // Lock camera - no user controls
-    camera.inputs.clear(); // Remove all camera inputs (mouse, keyboard, etc.)
-    
-    // Set camera target to center of game area
+
+    // Remove all camera controls - no user movement
+    camera.inputs.clear();
     camera.setTarget(BABYLON.Vector3.Zero());
-    
-    console.log('🎮 Fixed camera setup: 45° view from opposite side');
 
-    // Skip CRT post-processing for cleaner look
-    // setupPostProcessing(targetCanvas);
+    console.log('🎮 Fixed camera: 45° perspective, no movement');
 
-    // Setup glow layer - reduced intensity for better visibility
+    // Glow layer
     glowLayer = new BABYLON.GlowLayer("glow", scene);
     glowLayer.intensity = 0.8;
     glowLayer.blurKernelSize = 64;
 
     // Create scene objects
-    createEnhancedTable();
-    createEnhancedBorders();
-    createEnhancedPaddles();
-    createEnhancedBall();
-    createEnhancedLighting();
-    createParticleSystems();
-
+    createTable();
+    createBorders();
+    createPaddles();
+    createBall();
+    createLighting();
     // Setup responsive canvas
     setupResponsiveCanvas(targetCanvas);
 
-    // Start render loop with enhanced animations
+    // Start render loop
     engine.runRenderLoop(() => {
-      handleEnhancedAnimations();
+      updateAnimations();
       scene.render();
     });
 
@@ -396,62 +357,60 @@ export async function init() {
     if (resizeHandler) {
       window.removeEventListener('resize', resizeHandler);
     }
-    
+
     resizeHandler = () => {
       if (engine) {
         engine.resize();
         setupResponsiveCanvas(targetCanvas);
       }
     };
-    
+
     window.addEventListener('resize', resizeHandler);
 
-    console.log('✅ Enhanced 3D Pong Arena initialized successfully');
+    console.log('✅ 3D Pong scene initialized successfully');
   }
 
-  // CRT post-processing removed for cleaner look
-  // function setupPostProcessing(targetCanvas: HTMLCanvasElement) { ... }
-
-  function createEnhancedTable() {
-    table = BABYLON.MeshBuilder.CreateBox('table', { 
-      width: PONG_3D_CONFIG.TABLE.width, 
-      height: PONG_3D_CONFIG.TABLE.height, 
-      depth: PONG_3D_CONFIG.TABLE.depth 
+  function createTable() {
+    table = BABYLON.MeshBuilder.CreateBox('table', {
+      width: TABLE.width,
+      height: TABLE.height,
+      depth: TABLE.depth
     }, scene);
-    
+
     tableMat = new BABYLON.StandardMaterial('tableMat', scene);
-    tableMat.diffuseColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.TABLE.r, PONG_3D_CONFIG.COLORS.TABLE.g, PONG_3D_CONFIG.COLORS.TABLE.b);
-    tableMat.emissiveColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.TABLE.r, PONG_3D_CONFIG.COLORS.TABLE.g, PONG_3D_CONFIG.COLORS.TABLE.b);
+    tableMat.diffuseColor = new BABYLON.Color3(COLORS.TABLE.r, COLORS.TABLE.g, COLORS.TABLE.b);
+    tableMat.emissiveColor = new BABYLON.Color3(COLORS.TABLE.r, COLORS.TABLE.g, COLORS.TABLE.b);
     tableMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.2);
     tableMat.roughness = 0.8;
     table.material = tableMat;
-    table.position.y = -PONG_3D_CONFIG.TABLE.height / 2;
+    table.position.y = -TABLE.height / 2;
 
     // Add center line
     const centerLine = BABYLON.MeshBuilder.CreateBox('centerLine', {
       width: 0.05,
       height: 0.02,
-      depth: PONG_3D_CONFIG.TABLE.depth * 0.8
+      depth: TABLE.depth * 0.8
     }, scene);
-    
+
     const centerLineMat = new BABYLON.StandardMaterial('centerLineMat', scene);
-    centerLineMat.emissiveColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.BORDER.r, PONG_3D_CONFIG.COLORS.BORDER.g, PONG_3D_CONFIG.COLORS.BORDER.b);
+    centerLineMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
     centerLineMat.alpha = 0.6;
     centerLine.material = centerLineMat;
     centerLine.position.y = 0.01;
     glowLayer.addIncludedOnlyMesh(centerLine);
   }
 
-  function createEnhancedBorders() {
-    const borderThickness = PONG_3D_CONFIG.BORDER_THICKNESS;
-    const tableWidth = PONG_3D_CONFIG.TABLE.width;
-    const tableDepth = PONG_3D_CONFIG.TABLE.depth;
+  function createBorders() {
+    const borderThickness = BORDER_THICKNESS;
+    const tableWidth = TABLE.width;
+    const tableDepth = TABLE.depth;
 
+    // Lengthen left/right borders, shorten top/bottom borders
     const borderConfigs = [
-      { name: 'left', size: { width: borderThickness, height: 0.3, depth: tableDepth + borderThickness }, pos: { x: -tableWidth/2 - borderThickness/2, y: 0.1, z: 0 } },
-      { name: 'right', size: { width: borderThickness, height: 0.3, depth: tableDepth + borderThickness }, pos: { x: tableWidth/2 + borderThickness/2, y: 0.1, z: 0 } },
-      { name: 'top', size: { width: tableWidth, height: 0.3, depth: borderThickness }, pos: { x: 0, y: 0.1, z: tableDepth/2 + borderThickness/2 } },
-      { name: 'bottom', size: { width: tableWidth, height: 0.3, depth: borderThickness }, pos: { x: 0, y: 0.1, z: -tableDepth/2 - borderThickness/2 } }
+      { name: 'left', size: { width: borderThickness, height: 0.3, depth: tableDepth + borderThickness + 0.4 }, pos: { x: -tableWidth/2 - borderThickness/2, y: 0.1, z: 0 } },
+      { name: 'right', size: { width: borderThickness, height: 0.3, depth: tableDepth + borderThickness + 0.4 }, pos: { x: tableWidth/2 + borderThickness/2, y: 0.1, z: 0 } },
+      { name: 'top', size: { width: tableWidth - 0.4, height: 0.3, depth: borderThickness }, pos: { x: 0, y: 0.1, z: tableDepth/2 + borderThickness/2 } },
+      { name: 'bottom', size: { width: tableWidth - 0.4, height: 0.3, depth: borderThickness }, pos: { x: 0, y: 0.1, z: -tableDepth/2 - borderThickness/2 } }
     ];
 
     borders = [];
@@ -460,84 +419,79 @@ export async function init() {
     borderConfigs.forEach((config, index) => {
       const border = BABYLON.MeshBuilder.CreateBox(config.name + 'Border', config.size, scene);
       border.position = new BABYLON.Vector3(config.pos.x, config.pos.y, config.pos.z);
-      
+
       const borderMat = new BABYLON.StandardMaterial(config.name + 'BorderMat', scene);
-      borderMat.diffuseColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.BORDER.r, PONG_3D_CONFIG.COLORS.BORDER.g, PONG_3D_CONFIG.COLORS.BORDER.b);
-      borderMat.emissiveColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.BORDER.r, PONG_3D_CONFIG.COLORS.BORDER.g, PONG_3D_CONFIG.COLORS.BORDER.b);
-      borderMat.specularColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.BORDER.r, PONG_3D_CONFIG.COLORS.BORDER.g, PONG_3D_CONFIG.COLORS.BORDER.b);
+      borderMat.diffuseColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+      borderMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+      borderMat.specularColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
       borderMat.alpha = 0.8;
       border.material = borderMat;
-      
+
       borders.push(border);
       borderMats.push(borderMat);
       glowLayer.addIncludedOnlyMesh(border);
     });
   }
 
-  function createEnhancedPaddles() {
-    const paddleConfig = PONG_3D_CONFIG.PADDLE;
-    
-    // Left paddle (Player 1) - Enhanced design
-    paddle1 = BABYLON.MeshBuilder.CreateBox('paddle1', { 
-      width: paddleConfig.width, 
-      height: paddleConfig.height, 
-      depth: paddleConfig.depth 
+  function createPaddles() {
+    // Left paddle (Player 1)
+    paddle1 = BABYLON.MeshBuilder.CreateBox('paddle1', {
+      width: PADDLE.width,
+      height: PADDLE.height,
+      depth: PADDLE.depth
     }, scene);
-    
+
     paddle1Mat = new BABYLON.StandardMaterial('paddle1Mat', scene);
     paddle1Mat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-    paddle1Mat.emissiveColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.LEFT_PADDLE.r, PONG_3D_CONFIG.COLORS.LEFT_PADDLE.g, PONG_3D_CONFIG.COLORS.LEFT_PADDLE.b);
+    paddle1Mat.emissiveColor = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
     paddle1Mat.specularColor = new BABYLON.Color3(1, 1, 1);
     paddle1Mat.specularPower = 64;
     paddle1Mat.alpha = 0.9;
     paddle1.material = paddle1Mat;
-    
-    paddle1.position.x = -PONG_3D_CONFIG.TABLE.width/2 + 0.5;
-    paddle1.position.y = paddleConfig.height/2; // On table surface
-    paddle1.position.z = paddleConfig.depth/2; // Half paddle depth toward user
+
+    paddle1.position.x = -TABLE.width/2 + 0.5;
+    paddle1.position.y = PADDLE.height/2; // On table surface
+    paddle1.position.z = PADDLE.depth/2; // Half paddle depth toward user
     glowLayer.addIncludedOnlyMesh(paddle1);
 
-    // Right paddle (Player 2) - Enhanced design
-    paddle2 = BABYLON.MeshBuilder.CreateBox('paddle2', { 
-      width: paddleConfig.width, 
-      height: paddleConfig.height, 
-      depth: paddleConfig.depth 
+    // Right paddle (Player 2)
+    paddle2 = BABYLON.MeshBuilder.CreateBox('paddle2', {
+      width: PADDLE.width,
+      height: PADDLE.height,
+      depth: PADDLE.depth
     }, scene);
-    
+
     paddle2Mat = new BABYLON.StandardMaterial('paddle2Mat', scene);
     paddle2Mat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-    paddle2Mat.emissiveColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.r, PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.g, PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.b);
+    paddle2Mat.emissiveColor = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
     paddle2Mat.specularColor = new BABYLON.Color3(1, 1, 1);
     paddle2Mat.specularPower = 64;
     paddle2Mat.alpha = 0.9;
     paddle2.material = paddle2Mat;
-    
-    paddle2.position.x = PONG_3D_CONFIG.TABLE.width/2 - 0.5;
-    paddle2.position.y = paddleConfig.height/2; // On table surface
-    paddle2.position.z = paddleConfig.depth/2; // Half paddle depth toward user
+
+    paddle2.position.x = TABLE.width/2 - 0.5;
+    paddle2.position.y = PADDLE.height/2; // On table surface
+    paddle2.position.z = PADDLE.depth/2; // Half paddle depth toward user
     glowLayer.addIncludedOnlyMesh(paddle2);
   }
 
-  function createEnhancedBall() {
-    ball = BABYLON.MeshBuilder.CreateSphere('pongBall', { 
-      diameter: PONG_3D_CONFIG.BALL.radius * 2,
+  function createBall() {
+    ball = BABYLON.MeshBuilder.CreateSphere('pongBall', {
+      diameter: BALL.radius * 2,
       segments: 16
     }, scene);
-    
+
     ballMat = new BABYLON.StandardMaterial('ballMat', scene);
     ballMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-    ballMat.emissiveColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.BALL.r, PONG_3D_CONFIG.COLORS.BALL.g, PONG_3D_CONFIG.COLORS.BALL.b);
+    ballMat.emissiveColor = new BABYLON.Color3(COLORS.BALL.r, COLORS.BALL.g, COLORS.BALL.b);
     ballMat.specularColor = new BABYLON.Color3(1, 1, 1);
     ballMat.specularPower = 128;
     ball.material = ballMat;
-    ball.position.y = PONG_3D_CONFIG.BALL.radius;
+    ball.position.y = BALL.radius;
     glowLayer.addIncludedOnlyMesh(ball);
-
-    // Store initial position for trail calculation
-    lastBallPosition = { x: 0, y: PONG_3D_CONFIG.BALL.radius, z: 0 };
   }
 
-  function createEnhancedLighting() {
+  function createLighting() {
     // Main directional light
     mainLight = new BABYLON.DirectionalLight("mainLight", new BABYLON.Vector3(-0.5, -1, -0.5), scene);
     mainLight.diffuse = new BABYLON.Color3(0.8, 0.9, 1);
@@ -548,75 +502,57 @@ export async function init() {
     ambientLight.diffuse = new BABYLON.Color3(0.2, 0.3, 0.4);
     ambientLight.intensity = 0.3;
 
-    // Paddle lights - reduced intensity for better visibility
+    // Paddle lights
     paddle1Light = new BABYLON.PointLight("paddle1Light", new BABYLON.Vector3(-5, 2, 0), scene);
-    paddle1Light.diffuse = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.LEFT_PADDLE.r, PONG_3D_CONFIG.COLORS.LEFT_PADDLE.g, PONG_3D_CONFIG.COLORS.LEFT_PADDLE.b);
+    paddle1Light.diffuse = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
     paddle1Light.intensity = 0.8;
     paddle1Light.range = 3;
 
     paddle2Light = new BABYLON.PointLight("paddle2Light", new BABYLON.Vector3(5, 2, 0), scene);
-    paddle2Light.diffuse = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.r, PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.g, PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.b);
+    paddle2Light.diffuse = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
     paddle2Light.intensity = 0.8;
     paddle2Light.range = 3;
 
-    // Ball light - reduced intensity
+    // Ball light
     ballLight = new BABYLON.PointLight("ballLight", new BABYLON.Vector3(0, 1, 0), scene);
-    ballLight.diffuse = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.BALL.r, PONG_3D_CONFIG.COLORS.BALL.g, PONG_3D_CONFIG.COLORS.BALL.b);
+    ballLight.diffuse = new BABYLON.Color3(COLORS.BALL.r, COLORS.BALL.g, COLORS.BALL.b);
     ballLight.intensity = 1.0;
     ballLight.range = 2;
   }
 
-  function createParticleSystems() {
-    // Ball trail particles
-    ballTrailParticles = new BABYLON.ParticleSystem("ballTrail", 50, scene);
-    ballTrailParticles.particleTexture = new BABYLON.Texture("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", scene);
-    ballTrailParticles.emitter = ball;
-    ballTrailParticles.minEmitBox = new BABYLON.Vector3(-0.05, -0.05, -0.05);
-    ballTrailParticles.maxEmitBox = new BABYLON.Vector3(0.05, 0.05, 0.05);
-    ballTrailParticles.color1 = new BABYLON.Color4(PONG_3D_CONFIG.COLORS.PARTICLES.TRAIL.r, PONG_3D_CONFIG.COLORS.PARTICLES.TRAIL.g, PONG_3D_CONFIG.COLORS.PARTICLES.TRAIL.b, 1);
-    ballTrailParticles.color2 = new BABYLON.Color4(PONG_3D_CONFIG.COLORS.PARTICLES.TRAIL.r, PONG_3D_CONFIG.COLORS.PARTICLES.TRAIL.g, PONG_3D_CONFIG.COLORS.PARTICLES.TRAIL.b, 0);
-    ballTrailParticles.colorDead = new BABYLON.Color4(0, 0, 0, 0);
-    ballTrailParticles.minSize = 0.05;
-    ballTrailParticles.maxSize = 0.1;
-    ballTrailParticles.minLifeTime = 0.2;
-    ballTrailParticles.maxLifeTime = 0.5;
-    ballTrailParticles.emitRate = 100;
-    ballTrailParticles.minEmitPower = 0.1;
-    ballTrailParticles.maxEmitPower = 0.3;
-    ballTrailParticles.start();
-  }
+
 
   function setupResponsiveCanvas(targetCanvas: HTMLCanvasElement) {
     const isMobile = window.innerWidth < 1024;
-    
+
     if (isMobile && mobileCanvas) {
       const maxWidth = Math.min(window.innerWidth - 32, 400);
       const aspectRatio = 0.75; // Better aspect ratio for 3D view
       mobileCanvas.width = maxWidth;
       mobileCanvas.height = maxWidth * aspectRatio;
-      
-      console.log(`📱 Enhanced 3D Mobile canvas: ${mobileCanvas.width}x${mobileCanvas.height}`);
+
+      console.log(`📱 Mobile canvas: ${mobileCanvas.width}x${mobileCanvas.height}`);
     } else if (desktopCanvas) {
       desktopCanvas.width = 1000;
-      desktopCanvas.height = 600; // Enhanced resolution for desktop
-      
-      console.log(`🖥️ Enhanced 3D Desktop canvas: ${desktopCanvas.width}x${desktopCanvas.height}`);
+      desktopCanvas.height = 600;
+
+      console.log(`🖥️ Desktop canvas: ${desktopCanvas.width}x${desktopCanvas.height}`);
     }
-    
+
     if (engine) {
       engine.resize();
     }
   }
 
-  function handleEnhancedAnimations() {
+  function updateAnimations() {
     if (!scene || !engine) return;
-    
+
     const deltaTime = engine.getDeltaTime() / 1000;
 
     // Handle flash animations
     handleBorderFlashes(deltaTime);
     handlePaddleFlashes(deltaTime);
-    
+
     // Update light positions
     if (paddle1Light && paddle1) {
       paddle1Light.position.x = paddle1.position.x;
@@ -644,16 +580,16 @@ export async function init() {
       if (flashTime > 0) {
         borderFlashTimes[index] -= deltaTime;
         const flashIntensity = Math.max(0, borderFlashTimes[index] / 1.5);
-        
+
         if (borderMats[index]) {
           borderMats[index].emissiveColor = new BABYLON.Color3(
-            PONG_3D_CONFIG.COLORS.BORDER.r + (PONG_3D_CONFIG.COLORS.BORDER_FLASH.r - PONG_3D_CONFIG.COLORS.BORDER.r) * flashIntensity,
-            PONG_3D_CONFIG.COLORS.BORDER.g + (PONG_3D_CONFIG.COLORS.BORDER_FLASH.g - PONG_3D_CONFIG.COLORS.BORDER.g) * flashIntensity,
-            PONG_3D_CONFIG.COLORS.BORDER.b + (PONG_3D_CONFIG.COLORS.BORDER_FLASH.b - PONG_3D_CONFIG.COLORS.BORDER.b) * flashIntensity
+            COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * flashIntensity,
+            COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * flashIntensity,
+            COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * flashIntensity
           );
         }
       } else if (borderMats[index]) {
-        borderMats[index].emissiveColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.BORDER.r, PONG_3D_CONFIG.COLORS.BORDER.g, PONG_3D_CONFIG.COLORS.BORDER.b);
+        borderMats[index].emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
       }
     });
   }
@@ -663,20 +599,20 @@ export async function init() {
     if (paddleFlashTimes[0] > 0) {
       paddleFlashTimes[0] -= deltaTime;
       const flashIntensity = Math.max(0, paddleFlashTimes[0] / 1.0);
-      
+
       if (paddle1Mat) {
         paddle1Mat.emissiveColor = new BABYLON.Color3(
-          PONG_3D_CONFIG.COLORS.LEFT_PADDLE.r + (PONG_3D_CONFIG.COLORS.PADDLE_FLASH.r - PONG_3D_CONFIG.COLORS.LEFT_PADDLE.r) * flashIntensity,
-          PONG_3D_CONFIG.COLORS.LEFT_PADDLE.g + (PONG_3D_CONFIG.COLORS.PADDLE_FLASH.g - PONG_3D_CONFIG.COLORS.LEFT_PADDLE.g) * flashIntensity,
-          PONG_3D_CONFIG.COLORS.LEFT_PADDLE.b + (PONG_3D_CONFIG.COLORS.PADDLE_FLASH.b - PONG_3D_CONFIG.COLORS.LEFT_PADDLE.b) * flashIntensity
+          COLORS.LEFT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.LEFT_PADDLE.r) * flashIntensity,
+          COLORS.LEFT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.LEFT_PADDLE.g) * flashIntensity,
+          COLORS.LEFT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.LEFT_PADDLE.b) * flashIntensity
         );
       }
-      
+
       if (paddle1Light) {
         paddle1Light.intensity = 1.5 + 2.0 * flashIntensity;
       }
     } else if (paddle1Mat) {
-      paddle1Mat.emissiveColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.LEFT_PADDLE.r, PONG_3D_CONFIG.COLORS.LEFT_PADDLE.g, PONG_3D_CONFIG.COLORS.LEFT_PADDLE.b);
+      paddle1Mat.emissiveColor = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
       if (paddle1Light) paddle1Light.intensity = 1.5;
     }
 
@@ -684,20 +620,20 @@ export async function init() {
     if (paddleFlashTimes[1] > 0) {
       paddleFlashTimes[1] -= deltaTime;
       const flashIntensity = Math.max(0, paddleFlashTimes[1] / 1.0);
-      
+
       if (paddle2Mat) {
         paddle2Mat.emissiveColor = new BABYLON.Color3(
-          PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.r + (PONG_3D_CONFIG.COLORS.PADDLE_FLASH.r - PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.r) * flashIntensity,
-          PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.g + (PONG_3D_CONFIG.COLORS.PADDLE_FLASH.g - PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.g) * flashIntensity,
-          PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.b + (PONG_3D_CONFIG.COLORS.PADDLE_FLASH.b - PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.b) * flashIntensity
+          COLORS.RIGHT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.RIGHT_PADDLE.r) * flashIntensity,
+          COLORS.RIGHT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.RIGHT_PADDLE.g) * flashIntensity,
+          COLORS.RIGHT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.RIGHT_PADDLE.b) * flashIntensity
         );
       }
-      
+
       if (paddle2Light) {
         paddle2Light.intensity = 1.5 + 2.0 * flashIntensity;
       }
     } else if (paddle2Mat) {
-      paddle2Mat.emissiveColor = new BABYLON.Color3(PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.r, PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.g, PONG_3D_CONFIG.COLORS.RIGHT_PADDLE.b);
+      paddle2Mat.emissiveColor = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
       if (paddle2Light) paddle2Light.intensity = 1.5;
     }
   }
@@ -705,48 +641,40 @@ export async function init() {
   function update3DGameState() {
     if (!gameState || !ball || !paddle1 || !paddle2) return;
 
-    // Update ball position - direct coordinate mapping for 45° view
-    // Game coordinates: x: 0-800, y: 0-400
-    // 3D coordinates: x: -4 to 4, z: -2 to 2 (table bounds)
-    const ballX = ((gameState.ball.x / 800) - 0.5) * PONG_3D_CONFIG.TABLE.width * 0.9; // Scale to table width
-    const ballZ = ((gameState.ball.y / 400) - 0.5) * PONG_3D_CONFIG.TABLE.depth * 0.9; // Scale to table depth
-    
+    // Update ball position - map game (800x400) to table size
+    const ballX = ((gameState.ball.x / 800) - 0.5) * TABLE.width * 0.9;
+    const ballZ = ((gameState.ball.y / 400) - 0.5) * TABLE.depth * 0.9;
+
     ball.position.x = ballX;
     ball.position.z = ballZ;
-    ball.position.y = PONG_3D_CONFIG.BALL.radius;
+    ball.position.y = BALL.radius;
 
     // Update paddle positions - proper coordinate mapping
     const playerIds = Object.keys(gameState.paddles).map(id => parseInt(id)).sort();
-    
+
     if (playerIds.length >= 2) {
       // Left paddle (Player 1)
       const paddle1Data = gameState.paddles[playerIds[0]];
       if (paddle1Data) {
-        // Map game Y (0-400) to 3D Z (-2.1 to 2.1)
-        const paddleZ = ((paddle1Data.y / 400) - 0.5) * PONG_3D_CONFIG.TABLE.depth * 0.7;
-        const maxZ = PONG_3D_CONFIG.TABLE.depth * 0.35; // Keep paddle within borders
-        
-        // Move paddle toward user (bottom of canvas) by half paddle depth
-        const paddleOffset = PONG_3D_CONFIG.PADDLE.depth / 2;
+        // Increased movement range - paddles can move closer to borders
+        const paddleZ = ((paddle1Data.y / 400) - 0.5) * TABLE.depth * 0.9; // Increased from 0.7 to 0.9
+        const maxZ = TABLE.depth * 0.45; // Increased from 0.35 to 0.45
+        const paddleOffset = PADDLE.depth / 2;
         paddle1.position.z = Math.max(-maxZ, Math.min(maxZ, paddleZ)) + paddleOffset;
-        paddle1.position.y = PONG_3D_CONFIG.PADDLE.height/2;
-        // Left side of table
-        paddle1.position.x = -PONG_3D_CONFIG.TABLE.width/2 + 0.5;
+        paddle1.position.y = PADDLE.height/2;
+        paddle1.position.x = -TABLE.width/2 + 0.5;
       }
 
-      // Right paddle (Player 2) 
+      // Right paddle (Player 2)
       const paddle2Data = gameState.paddles[playerIds[1]];
       if (paddle2Data) {
-        // Map game Y (0-400) to 3D Z (-2.1 to 2.1)
-        const paddleZ = ((paddle2Data.y / 400) - 0.5) * PONG_3D_CONFIG.TABLE.depth * 0.7;
-        const maxZ = PONG_3D_CONFIG.TABLE.depth * 0.35; // Keep paddle within borders
-        
-        // Move paddle toward user (bottom of canvas) by half paddle depth
-        const paddleOffset = PONG_3D_CONFIG.PADDLE.depth / 2;
+        // Increased movement range - paddles can move closer to borders
+        const paddleZ = ((paddle2Data.y / 400) - 0.5) * TABLE.depth * 0.9; // Increased from 0.7 to 0.9
+        const maxZ = TABLE.depth * 0.45; // Increased from 0.35 to 0.45
+        const paddleOffset = PADDLE.depth / 2;
         paddle2.position.z = Math.max(-maxZ, Math.min(maxZ, paddleZ)) + paddleOffset;
-        paddle2.position.y = PONG_3D_CONFIG.PADDLE.height/2;
-        // Right side of table
-        paddle2.position.x = PONG_3D_CONFIG.TABLE.width/2 - 0.5;
+        paddle2.position.y = PADDLE.height/2;
+        paddle2.position.x = TABLE.width/2 - 0.5;
       }
     }
 
@@ -758,11 +686,11 @@ export async function init() {
     if (!ball || !gameState) return;
 
     const ballSpeed = Math.sqrt(gameState.ball.dx * gameState.ball.dx + gameState.ball.dy * gameState.ball.dy);
-    
-    // Trigger paddle flash on collision (approximate detection)
-    if (Math.abs(gameState.ball.x - 50) < 30 && ballSpeed > 0.1) { // Left paddle area
+
+    // Trigger paddle flash on collision (shortened collision detection)
+    if (Math.abs(gameState.ball.x - 50) < 15 && ballSpeed > 0.1) { // Reduced from 30 to 15
       paddleFlashTimes[0] = 1.0;
-    } else if (Math.abs(gameState.ball.x - 750) < 30 && ballSpeed > 0.1) { // Right paddle area
+    } else if (Math.abs(gameState.ball.x - 750) < 15 && ballSpeed > 0.1) { // Reduced from 30 to 15
       paddleFlashTimes[1] = 1.0;
     }
 
@@ -772,13 +700,37 @@ export async function init() {
     } else if (gameState.ball.y > 370) { // Bottom border
       borderFlashTimes[3] = 1.5;
     }
+
+    // Check for scoring and trigger orange flash
+    if (gameState.ball.x < 10) { // Left side score
+      borderFlashTimes[0] = 2.0; // Left border orange flash
+      triggerScoreFlash(0);
+    } else if (gameState.ball.x > 790) { // Right side score
+      borderFlashTimes[1] = 2.0; // Right border orange flash
+      triggerScoreFlash(1);
+    }
+  }
+
+  function triggerScoreFlash(borderIndex: number) {
+    if (borderMats[borderIndex]) {
+      // Flash orange for score
+      const flashDuration = 2.0;
+      borderFlashTimes[borderIndex] = flashDuration;
+      
+      // Override with orange color temporarily
+      setTimeout(() => {
+        if (borderMats[borderIndex]) {
+          borderMats[borderIndex].emissiveColor = new BABYLON.Color3(COLORS.SCORE_FLASH.r, COLORS.SCORE_FLASH.g, COLORS.SCORE_FLASH.b);
+        }
+      }, 50);
+    }
   }
 
   function startCountdown() {
     let count = 5;
     if (gameStatusEl) gameStatusEl.textContent = `⚡ BATTLE STARTS IN ${count}... ⚡`;
     if (mobileGameStatusEl) mobileGameStatusEl.textContent = `⚡ ${count} ⚡`;
-    
+
     const countdownInterval = setInterval(() => {
       count--;
       if (count > 0) {
@@ -786,7 +738,7 @@ export async function init() {
         if (mobileGameStatusEl) mobileGameStatusEl.textContent = `⚡ ${count} ⚡`;
       } else {
         clearInterval(countdownInterval);
-        
+
         const isFirstPlayer = currentRoom && currentRoom.players[0] === myPlayerId;
         if (isFirstPlayer) {
           console.log('🎮 Starting game as first player...');
@@ -798,7 +750,7 @@ export async function init() {
           if (gameStatusEl) gameStatusEl.textContent = '⚡ WAITING FOR BATTLE START... ⚡';
           if (mobileGameStatusEl) mobileGameStatusEl.textContent = '⚡ WAIT ⚡';
         }
-        
+
         setTimeout(() => {
           requestGameState();
         }, 500);
@@ -808,21 +760,21 @@ export async function init() {
 
   function handleKeyPress() {
     if (!currentRoom || !gameState || gameState.gameOver || myPlayerId === null) return;
-    
+
     const myPaddle = gameState.paddles[myPlayerId];
     if (!myPaddle) return;
-    
+
     let newY: number | null = null;
     const paddleSpeed = 18; // Enhanced speed for better responsiveness
     const paddleHeight = 100;
     const gameHeight = 400;
-    
+
     if (keysPressed['KeyW'] || keysPressed['ArrowUp']) {
       newY = Math.max(1, myPaddle.y - paddleSpeed);
     } else if (keysPressed['KeyS'] || keysPressed['ArrowDown']) {
       newY = Math.min(gameHeight - paddleHeight - 1, myPaddle.y + paddleSpeed);
     }
-    
+
     if (newY !== null) {
       gameService.movePlayer(currentRoom.roomId, newY);
     }
@@ -891,7 +843,7 @@ export async function init() {
 
     function startMobileMovement() {
       if (mobileControlInterval) return;
-      
+
       handleMobileMovement();
       mobileControlInterval = setInterval(handleMobileMovement, 16) as any;
     }
@@ -906,7 +858,7 @@ export async function init() {
 
     function handleMobileMovement() {
       if (!currentRoom || !gameState || gameState.gameOver || !mobileControlDirection || myPlayerId === null) return;
-      
+
       const myPaddle = gameState.paddles[myPlayerId];
       if (!myPaddle) return;
 
@@ -954,10 +906,10 @@ export async function init() {
   function showPauseMessage(message: string, countdownSeconds?: number) {
     if (pauseMessageEl) pauseMessageEl.classList.remove('hidden');
     if (pauseTextEl) pauseTextEl.textContent = message;
-    
+
     if (mobilePauseMessageEl) mobilePauseMessageEl.classList.remove('hidden');
     if (mobilePauseTextEl) mobilePauseTextEl.textContent = '⏸️ PAUSED';
-    
+
     if (countdownSeconds) {
       startPauseCountdown(countdownSeconds);
     }
@@ -966,7 +918,7 @@ export async function init() {
   function hidePauseMessage() {
     if (pauseMessageEl) pauseMessageEl.classList.add('hidden');
     if (mobilePauseMessageEl) mobilePauseMessageEl.classList.add('hidden');
-    
+
     if (pauseCountdownTimer) {
       clearInterval(pauseCountdownTimer);
       pauseCountdownTimer = null;
@@ -977,22 +929,22 @@ export async function init() {
     if (pauseCountdownTimer) {
       clearInterval(pauseCountdownTimer);
     }
-    
+
     let remaining = seconds;
-    
+
     const updateCountdown = () => {
       const text = `Reconnecting in ${remaining}s...`;
       if (pauseCountdownEl) pauseCountdownEl.textContent = text;
       if (mobilePauseCountdownEl) mobilePauseCountdownEl.textContent = text;
-      
+
       remaining--;
-      
+
       if (remaining < 0) {
         clearInterval(pauseCountdownTimer!);
         pauseCountdownTimer = null;
       }
     };
-    
+
     updateCountdown();
     pauseCountdownTimer = setInterval(updateCountdown, 1000) as any;
   }
@@ -1004,7 +956,7 @@ export async function init() {
 
   async function updatePlayerNames() {
     if (!gameState?.score) return;
-    
+
     const playerIds = Object.keys(gameState.score).map(id => parseInt(id)).sort();
     if (playerIds.length < 2) return;
 
@@ -1019,7 +971,7 @@ export async function init() {
       if (player2NameEl) player2NameEl.textContent = player2?.username || `WARRIOR ${playerIds[1]}`;
       if (player1InitialEl) player1InitialEl.textContent = player1?.username?.[0]?.toUpperCase() || 'W1';
       if (player2InitialEl) player2InitialEl.textContent = player2?.username?.[0]?.toUpperCase() || 'W2';
-      
+
       // Update mobile elements
       if (mobilePlayer1NameEl) mobilePlayer1NameEl.textContent = player1?.username || `WARRIOR ${playerIds[0]}`;
       if (mobilePlayer2NameEl) mobilePlayer2NameEl.textContent = player2?.username || `WARRIOR ${playerIds[1]}`;
@@ -1032,16 +984,16 @@ export async function init() {
 
   function updateScores() {
     if (!gameState?.score) return;
-    
+
     const playerIds = Object.keys(gameState.score).map(id => parseInt(id)).sort();
     if (playerIds.length >= 2) {
       const score1 = gameState.score[playerIds[0]] || 0;
       const score2 = gameState.score[playerIds[1]] || 0;
-      
+
       // Update desktop scores
       if (player1ScoreEl) player1ScoreEl.textContent = score1.toString();
       if (player2ScoreEl) player2ScoreEl.textContent = score2.toString();
-      
+
       // Update mobile scores
       if (mobilePlayer1ScoreEl) mobilePlayer1ScoreEl.textContent = score1.toString();
       if (mobilePlayer2ScoreEl) mobilePlayer2ScoreEl.textContent = score2.toString();
@@ -1073,18 +1025,18 @@ export async function init() {
       if (player2NameEl) player2NameEl.textContent = player2Name;
       if (player1InitialEl) player1InitialEl.textContent = player1Initial;
       if (player2InitialEl) player2InitialEl.textContent = player2Initial;
-      
+
       // Mobile elements
       if (mobilePlayer1NameEl) mobilePlayer1NameEl.textContent = player1Name;
       if (mobilePlayer2NameEl) mobilePlayer2NameEl.textContent = player2Name;
       if (mobilePlayer1InitialEl) mobilePlayer1InitialEl.textContent = player1Initial;
       if (mobilePlayer2InitialEl) mobilePlayer2InitialEl.textContent = player2Initial;
-      
+
       // Initialize scores
       [player1ScoreEl, player2ScoreEl, mobilePlayer1ScoreEl, mobilePlayer2ScoreEl].forEach(el => {
         if (el) el.textContent = '0';
       });
-      
+
       console.log('🎮 Enhanced player names initialized:', {
         player1: player1Name,
         player2: player2Name
@@ -1096,55 +1048,44 @@ export async function init() {
 
   function cleanup3D() {
     try {
-      if (ballTrailParticles) {
-        ballTrailParticles.dispose();
-        ballTrailParticles = null;
-      }
-
       if (engine) {
         engine.stopRenderLoop();
         engine.dispose();
         engine = null;
       }
-      
+
       // Remove window event listeners
       if (resizeHandler) {
         window.removeEventListener('resize', resizeHandler);
         resizeHandler = null;
       }
-      
+
       // Reset all variables
       scene = null;
       camera = null;
       glowLayer = null;
-      // CRT post-process removed
-      
+
       table = null;
       borders = [];
       paddle1 = null;
       paddle2 = null;
       ball = null;
-      ballTrail = null;
-      
+
       tableMat = null;
       borderMats = [];
       paddle1Mat = null;
       paddle2Mat = null;
       ballMat = null;
-      
+
       mainLight = null;
       paddle1Light = null;
       paddle2Light = null;
       ballLight = null;
       ambientLight = null;
-      
-      hitParticles = null;
-      scoreParticles = null;
-      ballTrailParticles = null;
-      
-      console.log('🧹 Enhanced 3D scene cleaned up');
+
+      console.log('🧹 3D scene cleaned up');
     } catch (e) {
-      console.error('Error cleaning up enhanced 3D scene:', e);
+      console.error('Error cleaning up 3D scene:', e);
     }
   }
 
