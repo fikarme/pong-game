@@ -27,10 +27,23 @@ const COLORS = {
   LEFT_PADDLE: { r: 1, g: 0.2, b: 0.3 }, // Neon red
   RIGHT_PADDLE: { r: 0.2, g: 1, b: 0.2 }, // Neon green
   BALL: { r: 1, g: 1, b: 1 }, // Bright white
-  BORDER_FLASH: { r: 0, g: 1, b: 1 }, // Cyan flash (fixed)
+  BORDER_FLASH: { r: 1, g: 1, b: 0 }, // Yellow flash (fixed)
   PADDLE_FLASH: { r: 1, g: 1, b: 0 }, // Yellow flash
   SCORE_FLASH: { r: 1, g: 0.5, b: 0 } // Orange score flash
 };
+
+const PADSPEED = 0.09;
+const BALLSPEED = 0.09;
+const BALL_SPEED_MULTIPLIER = 1.1; // Ball speeds up by 10% on paddle hit
+
+type RGB = { r: number; g: number; b: number };
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+const lerpColor = (a: RGB, b: RGB, t: number): RGB => ({
+  r: clamp01(a.r + (b.r - a.r) * t),
+  g: clamp01(a.g + (b.g - a.g) * t),
+  b: clamp01(a.b + (b.b - a.b) * t)
+});
+const toColor3 = (c: RGB) => new BABYLON.Color3(c.r, c.g, c.b);
 
 interface Player {
   id: number;
@@ -50,6 +63,7 @@ let borders: any[] = [];
 let paddle1: any = null;
 let paddle2: any = null;
 let ball: any = null;
+let ballTrail: any = null;
 
 // Materials
 let tableMat: any = null;
@@ -77,6 +91,7 @@ let keysPressed: { [key: string]: boolean } = {};
 let pauseCountdownTimer: number | null = null;
 let mobileControlDirection: 'up' | 'down' | null = null;
 let mobileControlInterval: number | null = null;
+let previousScore: { [userId: number]: number } = {}; // Track previous scores for trail clearing
 
 // Global resize handler
 let resizeHandler: (() => void) | null = null;
@@ -378,8 +393,8 @@ export async function init() {
     }, scene);
 
     tableMat = new BABYLON.StandardMaterial('tableMat', scene);
-    tableMat.diffuseColor = new BABYLON.Color3(COLORS.TABLE.r, COLORS.TABLE.g, COLORS.TABLE.b);
-    tableMat.emissiveColor = new BABYLON.Color3(COLORS.TABLE.r, COLORS.TABLE.g, COLORS.TABLE.b);
+    tableMat.diffuseColor = toColor3(COLORS.TABLE);
+    tableMat.emissiveColor = toColor3(COLORS.TABLE);
     tableMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.2);
     tableMat.roughness = 0.8;
     table.material = tableMat;
@@ -393,7 +408,7 @@ export async function init() {
     }, scene);
 
     const centerLineMat = new BABYLON.StandardMaterial('centerLineMat', scene);
-    centerLineMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+    centerLineMat.emissiveColor = toColor3(COLORS.BORDER);
     centerLineMat.alpha = 0.6;
     centerLine.material = centerLineMat;
     centerLine.position.y = 0.01;
@@ -405,12 +420,12 @@ export async function init() {
     const tableWidth = TABLE.width;
     const tableDepth = TABLE.depth;
 
-    // Lengthen left/right borders, shorten top/bottom borders
+    // Lengthen top/bottom borders a bit more
     const borderConfigs = [
       { name: 'left', size: { width: borderThickness, height: 0.3, depth: tableDepth + borderThickness + 0.4 }, pos: { x: -tableWidth/2 - borderThickness/2, y: 0.1, z: 0 } },
       { name: 'right', size: { width: borderThickness, height: 0.3, depth: tableDepth + borderThickness + 0.4 }, pos: { x: tableWidth/2 + borderThickness/2, y: 0.1, z: 0 } },
-      { name: 'top', size: { width: tableWidth - 0.4, height: 0.3, depth: borderThickness }, pos: { x: 0, y: 0.1, z: tableDepth/2 + borderThickness/2 } },
-      { name: 'bottom', size: { width: tableWidth - 0.4, height: 0.3, depth: borderThickness }, pos: { x: 0, y: 0.1, z: -tableDepth/2 - borderThickness/2 } }
+      { name: 'top', size: { width: tableWidth + 0.2, height: 0.3, depth: borderThickness }, pos: { x: 0, y: 0.1, z: tableDepth/2 + borderThickness/2 } },
+      { name: 'bottom', size: { width: tableWidth + 0.2, height: 0.3, depth: borderThickness }, pos: { x: 0, y: 0.1, z: -tableDepth/2 - borderThickness/2 } }
     ];
 
     borders = [];
@@ -421,9 +436,9 @@ export async function init() {
       border.position = new BABYLON.Vector3(config.pos.x, config.pos.y, config.pos.z);
 
       const borderMat = new BABYLON.StandardMaterial(config.name + 'BorderMat', scene);
-      borderMat.diffuseColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-      borderMat.emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
-      borderMat.specularColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+      borderMat.diffuseColor = toColor3(COLORS.BORDER);
+      borderMat.emissiveColor = toColor3(COLORS.BORDER);
+      borderMat.specularColor = toColor3(COLORS.BORDER);
       borderMat.alpha = 0.8;
       border.material = borderMat;
 
@@ -443,7 +458,7 @@ export async function init() {
 
     paddle1Mat = new BABYLON.StandardMaterial('paddle1Mat', scene);
     paddle1Mat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-    paddle1Mat.emissiveColor = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
+    paddle1Mat.emissiveColor = toColor3(COLORS.LEFT_PADDLE);
     paddle1Mat.specularColor = new BABYLON.Color3(1, 1, 1);
     paddle1Mat.specularPower = 64;
     paddle1Mat.alpha = 0.9;
@@ -463,7 +478,7 @@ export async function init() {
 
     paddle2Mat = new BABYLON.StandardMaterial('paddle2Mat', scene);
     paddle2Mat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-    paddle2Mat.emissiveColor = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
+    paddle2Mat.emissiveColor = toColor3(COLORS.RIGHT_PADDLE);
     paddle2Mat.specularColor = new BABYLON.Color3(1, 1, 1);
     paddle2Mat.specularPower = 64;
     paddle2Mat.alpha = 0.9;
@@ -483,12 +498,34 @@ export async function init() {
 
     ballMat = new BABYLON.StandardMaterial('ballMat', scene);
     ballMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-    ballMat.emissiveColor = new BABYLON.Color3(COLORS.BALL.r, COLORS.BALL.g, COLORS.BALL.b);
+    ballMat.emissiveColor = toColor3(COLORS.BALL);
     ballMat.specularColor = new BABYLON.Color3(1, 1, 1);
     ballMat.specularPower = 128;
     ball.material = ballMat;
     ball.position.y = BALL.radius;
     glowLayer.addIncludedOnlyMesh(ball);
+
+    // Create ball trail
+    createBallTrail();
+  }
+
+  function createBallTrail() {
+    ballTrail = new BABYLON.TrailMesh('ballTrail', ball, scene, 0.04, 30, true);
+    const trailMat = new BABYLON.StandardMaterial('trailMat', scene);
+    trailMat.emissiveColor = toColor3(COLORS.BALL);
+    trailMat.alpha = 0.4;
+    ballTrail.material = trailMat;
+    glowLayer.addIncludedOnlyMesh(ballTrail);
+  }
+
+  function clearBallTrail() {
+    if (ballTrail) {
+      ballTrail.dispose();
+      ballTrail = null;
+      setTimeout(() => {
+        createBallTrail();
+      }, 1000);
+    }
   }
 
   function createLighting() {
@@ -504,18 +541,18 @@ export async function init() {
 
     // Paddle lights
     paddle1Light = new BABYLON.PointLight("paddle1Light", new BABYLON.Vector3(-5, 2, 0), scene);
-    paddle1Light.diffuse = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
+    paddle1Light.diffuse = toColor3(COLORS.LEFT_PADDLE);
     paddle1Light.intensity = 0.8;
     paddle1Light.range = 3;
 
     paddle2Light = new BABYLON.PointLight("paddle2Light", new BABYLON.Vector3(5, 2, 0), scene);
-    paddle2Light.diffuse = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
+    paddle2Light.diffuse = toColor3(COLORS.RIGHT_PADDLE);
     paddle2Light.intensity = 0.8;
     paddle2Light.range = 3;
 
     // Ball light
     ballLight = new BABYLON.PointLight("ballLight", new BABYLON.Vector3(0, 1, 0), scene);
-    ballLight.diffuse = new BABYLON.Color3(COLORS.BALL.r, COLORS.BALL.g, COLORS.BALL.b);
+    ballLight.diffuse = toColor3(COLORS.BALL);
     ballLight.intensity = 1.0;
     ballLight.range = 2;
   }
@@ -570,8 +607,8 @@ export async function init() {
 
     // Animate ball rotation for visual effect
     if (ball && gameState) {
-      ball.rotation.x += deltaTime * 5;
-      ball.rotation.z += deltaTime * 3;
+      ball.rotation.x += deltaTime * BALLSPEED * 50;
+      ball.rotation.z += deltaTime * BALLSPEED * 30;
     }
   }
 
@@ -581,15 +618,22 @@ export async function init() {
         borderFlashTimes[index] -= deltaTime;
         const flashIntensity = Math.max(0, borderFlashTimes[index] / 1.5);
 
-        if (borderMats[index]) {
-          borderMats[index].emissiveColor = new BABYLON.Color3(
-            COLORS.BORDER.r + (COLORS.BORDER_FLASH.r - COLORS.BORDER.r) * flashIntensity,
-            COLORS.BORDER.g + (COLORS.BORDER_FLASH.g - COLORS.BORDER.g) * flashIntensity,
-            COLORS.BORDER.b + (COLORS.BORDER_FLASH.b - COLORS.BORDER.b) * flashIntensity
-          );
+        if (borderMats[index] && flashIntensity > 0) {
+          const baseColor = COLORS.BORDER;
+          const flashColor = COLORS.BORDER_FLASH;
+          const lerpedColor = lerpColor(baseColor, flashColor, flashIntensity);
+          borderMats[index].emissiveColor = toColor3(lerpedColor);
         }
       } else if (borderMats[index]) {
-        borderMats[index].emissiveColor = new BABYLON.Color3(COLORS.BORDER.r, COLORS.BORDER.g, COLORS.BORDER.b);
+        // Only reset to base color if not in score flash mode
+        const currentColor = borderMats[index].emissiveColor;
+        const isOrangeFlash = Math.abs(currentColor.r - COLORS.SCORE_FLASH.r) < 0.1 &&
+                              Math.abs(currentColor.g - COLORS.SCORE_FLASH.g) < 0.1 &&
+                              Math.abs(currentColor.b - COLORS.SCORE_FLASH.b) < 0.1;
+
+        if (!isOrangeFlash) {
+          borderMats[index].emissiveColor = toColor3(COLORS.BORDER);
+        }
       }
     });
   }
@@ -601,19 +645,18 @@ export async function init() {
       const flashIntensity = Math.max(0, paddleFlashTimes[0] / 1.0);
 
       if (paddle1Mat) {
-        paddle1Mat.emissiveColor = new BABYLON.Color3(
-          COLORS.LEFT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.LEFT_PADDLE.r) * flashIntensity,
-          COLORS.LEFT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.LEFT_PADDLE.g) * flashIntensity,
-          COLORS.LEFT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.LEFT_PADDLE.b) * flashIntensity
-        );
+        const baseColor = COLORS.LEFT_PADDLE;
+        const flashColor = COLORS.PADDLE_FLASH;
+        const lerpedColor = lerpColor(baseColor, flashColor, flashIntensity);
+        paddle1Mat.emissiveColor = toColor3(lerpedColor);
       }
 
       if (paddle1Light) {
-        paddle1Light.intensity = 1.5 + 2.0 * flashIntensity;
+        paddle1Light.intensity = 0.8 + 3.0 * flashIntensity; // More dramatic flash
       }
     } else if (paddle1Mat) {
-      paddle1Mat.emissiveColor = new BABYLON.Color3(COLORS.LEFT_PADDLE.r, COLORS.LEFT_PADDLE.g, COLORS.LEFT_PADDLE.b);
-      if (paddle1Light) paddle1Light.intensity = 1.5;
+      paddle1Mat.emissiveColor = toColor3(COLORS.LEFT_PADDLE);
+      if (paddle1Light) paddle1Light.intensity = 0.8;
     }
 
     // Paddle 2 flash
@@ -622,24 +665,33 @@ export async function init() {
       const flashIntensity = Math.max(0, paddleFlashTimes[1] / 1.0);
 
       if (paddle2Mat) {
-        paddle2Mat.emissiveColor = new BABYLON.Color3(
-          COLORS.RIGHT_PADDLE.r + (COLORS.PADDLE_FLASH.r - COLORS.RIGHT_PADDLE.r) * flashIntensity,
-          COLORS.RIGHT_PADDLE.g + (COLORS.PADDLE_FLASH.g - COLORS.RIGHT_PADDLE.g) * flashIntensity,
-          COLORS.RIGHT_PADDLE.b + (COLORS.PADDLE_FLASH.b - COLORS.RIGHT_PADDLE.b) * flashIntensity
-        );
+        const baseColor = COLORS.RIGHT_PADDLE;
+        const flashColor = COLORS.PADDLE_FLASH;
+        const lerpedColor = lerpColor(baseColor, flashColor, flashIntensity);
+        paddle2Mat.emissiveColor = toColor3(lerpedColor);
       }
 
       if (paddle2Light) {
-        paddle2Light.intensity = 1.5 + 2.0 * flashIntensity;
+        paddle2Light.intensity = 0.8 + 3.0 * flashIntensity; // More dramatic flash
       }
     } else if (paddle2Mat) {
-      paddle2Mat.emissiveColor = new BABYLON.Color3(COLORS.RIGHT_PADDLE.r, COLORS.RIGHT_PADDLE.g, COLORS.RIGHT_PADDLE.b);
-      if (paddle2Light) paddle2Light.intensity = 1.5;
+      paddle2Mat.emissiveColor = toColor3(COLORS.RIGHT_PADDLE);
+      if (paddle2Light) paddle2Light.intensity = 0.8;
     }
   }
 
   function update3DGameState() {
     if (!gameState || !ball || !paddle1 || !paddle2) return;
+
+    // Check if score changed (ball restart) - only track score, trail cleared on paddle hits
+    const playerIds = Object.keys(gameState.score).map(id => parseInt(id));
+    const scoreChanged = playerIds.some(id => previousScore[id] !== gameState!.score[id]);
+    if (scoreChanged) {
+      // Update previous scores
+      playerIds.forEach(id => {
+        previousScore[id] = gameState!.score[id];
+      });
+    }
 
     // Update ball position - map game (800x400) to table size
     const ballX = ((gameState.ball.x / 800) - 0.5) * TABLE.width * 0.9;
@@ -650,27 +702,25 @@ export async function init() {
     ball.position.y = BALL.radius;
 
     // Update paddle positions - proper coordinate mapping
-    const playerIds = Object.keys(gameState.paddles).map(id => parseInt(id)).sort();
+    const sortedPlayerIds = playerIds.sort();
 
-    if (playerIds.length >= 2) {
-      // Left paddle (Player 1)
-      const paddle1Data = gameState.paddles[playerIds[0]];
+    if (sortedPlayerIds.length >= 2) {
+      // Left paddle (Player 1) - first player ID
+      const paddle1Data = gameState.paddles[sortedPlayerIds[0]];
       if (paddle1Data) {
-        // Increased movement range - paddles can move closer to borders
-        const paddleZ = ((paddle1Data.y / 400) - 0.5) * TABLE.depth * 0.9; // Increased from 0.7 to 0.9
-        const maxZ = TABLE.depth * 0.45; // Increased from 0.35 to 0.45
+        const paddleZ = ((paddle1Data.y / 400) - 0.5) * TABLE.depth * 0.9;
+        const maxZ = TABLE.depth * 0.48; // Increased movement range
         const paddleOffset = PADDLE.depth / 2;
         paddle1.position.z = Math.max(-maxZ, Math.min(maxZ, paddleZ)) + paddleOffset;
         paddle1.position.y = PADDLE.height/2;
         paddle1.position.x = -TABLE.width/2 + 0.5;
       }
 
-      // Right paddle (Player 2)
-      const paddle2Data = gameState.paddles[playerIds[1]];
+      // Right paddle (Player 2) - second player ID
+      const paddle2Data = gameState.paddles[sortedPlayerIds[1]];
       if (paddle2Data) {
-        // Increased movement range - paddles can move closer to borders
-        const paddleZ = ((paddle2Data.y / 400) - 0.5) * TABLE.depth * 0.9; // Increased from 0.7 to 0.9
-        const maxZ = TABLE.depth * 0.45; // Increased from 0.35 to 0.45
+        const paddleZ = ((paddle2Data.y / 400) - 0.5) * TABLE.depth * 0.9;
+        const maxZ = TABLE.depth * 0.48; // Increased movement range
         const paddleOffset = PADDLE.depth / 2;
         paddle2.position.z = Math.max(-maxZ, Math.min(maxZ, paddleZ)) + paddleOffset;
         paddle2.position.y = PADDLE.height/2;
@@ -680,53 +730,64 @@ export async function init() {
 
     // Check for collisions and trigger effects
     checkCollisionEffects();
-  }
-
-  function checkCollisionEffects() {
+  }  function checkCollisionEffects() {
     if (!ball || !gameState) return;
 
     const ballSpeed = Math.sqrt(gameState.ball.dx * gameState.ball.dx + gameState.ball.dy * gameState.ball.dy);
 
-    // Trigger paddle flash on collision (shortened collision detection)
-    if (Math.abs(gameState.ball.x - 50) < 15 && ballSpeed > 0.1) { // Reduced from 30 to 15
+    // Shrunk paddle collision detection - check if ball is moving towards paddle
+    if (gameState.ball.x < 80 && gameState.ball.dx > 0 && ballSpeed > 0.05) { // Left paddle (reduced from 100 to 80)
       paddleFlashTimes[0] = 1.0;
-    } else if (Math.abs(gameState.ball.x - 750) < 15 && ballSpeed > 0.1) { // Reduced from 30 to 15
+      // Speed up ball by 10% and clear trail on paddle hit
+      gameState.ball.dx *= BALL_SPEED_MULTIPLIER;
+      gameState.ball.dy *= BALL_SPEED_MULTIPLIER;
+      clearBallTrail();
+      console.log('💥 Left paddle hit flash! Ball speed increased');
+    } else if (gameState.ball.x > 720 && gameState.ball.dx < 0 && ballSpeed > 0.05) { // Right paddle (reduced from 700 to 720)
       paddleFlashTimes[1] = 1.0;
+      // Speed up ball by 10% and clear trail on paddle hit
+      gameState.ball.dx *= BALL_SPEED_MULTIPLIER;
+      gameState.ball.dy *= BALL_SPEED_MULTIPLIER;
+      clearBallTrail();
+      console.log('💥 Right paddle hit flash! Ball speed increased');
     }
 
-    // Trigger border flash on collision
-    if (gameState.ball.y < 30) { // Top border
+    // Border collision detection - more sensitive
+    if (gameState.ball.y <= 20 && gameState.ball.dy < 0) { // Top border
       borderFlashTimes[2] = 1.5;
-    } else if (gameState.ball.y > 370) { // Bottom border
+      console.log('💥 Top border flash!');
+    } else if (gameState.ball.y >= 380 && gameState.ball.dy > 0) { // Bottom border
       borderFlashTimes[3] = 1.5;
+      console.log('💥 Bottom border flash!');
     }
 
-    // Check for scoring and trigger orange flash
-    if (gameState.ball.x < 10) { // Left side score
-      borderFlashTimes[0] = 2.0; // Left border orange flash
+    // Score detection - trigger orange flash
+    if (gameState.ball.x <= 5) { // Left side score
+      borderFlashTimes[0] = 2.0;
       triggerScoreFlash(0);
-    } else if (gameState.ball.x > 790) { // Right side score
-      borderFlashTimes[1] = 2.0; // Right border orange flash
+      console.log('🎯 Left side score flash!');
+    } else if (gameState.ball.x >= 795) { // Right side score
+      borderFlashTimes[1] = 2.0;
       triggerScoreFlash(1);
+      console.log('🎯 Right side score flash!');
     }
   }
 
   function triggerScoreFlash(borderIndex: number) {
     if (borderMats[borderIndex]) {
-      // Flash orange for score
-      const flashDuration = 2.0;
-      borderFlashTimes[borderIndex] = flashDuration;
-      
-      // Override with orange color temporarily
+      // Immediately set orange color for score
+      borderMats[borderIndex].emissiveColor = toColor3(COLORS.SCORE_FLASH);
+
+      // Reset to normal color after flash duration
       setTimeout(() => {
         if (borderMats[borderIndex]) {
-          borderMats[borderIndex].emissiveColor = new BABYLON.Color3(COLORS.SCORE_FLASH.r, COLORS.SCORE_FLASH.g, COLORS.SCORE_FLASH.b);
+          borderMats[borderIndex].emissiveColor = toColor3(COLORS.BORDER);
         }
-      }, 50);
-    }
-  }
+      }, 2000); // 2 second orange flash
 
-  function startCountdown() {
+      console.log('🟠 Score flash triggered for border:', borderIndex);
+    }
+  }  function startCountdown() {
     let count = 5;
     if (gameStatusEl) gameStatusEl.textContent = `⚡ BATTLE STARTS IN ${count}... ⚡`;
     if (mobileGameStatusEl) mobileGameStatusEl.textContent = `⚡ ${count} ⚡`;
@@ -765,14 +826,14 @@ export async function init() {
     if (!myPaddle) return;
 
     let newY: number | null = null;
-    const paddleSpeed = 18; // Enhanced speed for better responsiveness
+    const paddleSpeed = PADSPEED * 200; // Use PADSPEED constant
     const paddleHeight = 100;
     const gameHeight = 400;
 
     if (keysPressed['KeyW'] || keysPressed['ArrowUp']) {
-      newY = Math.max(1, myPaddle.y - paddleSpeed);
-    } else if (keysPressed['KeyS'] || keysPressed['ArrowDown']) {
       newY = Math.min(gameHeight - paddleHeight - 1, myPaddle.y + paddleSpeed);
+    } else if (keysPressed['KeyS'] || keysPressed['ArrowDown']) {
+      newY = Math.max(1, myPaddle.y - paddleSpeed);
     }
 
     if (newY !== null) {
@@ -791,6 +852,19 @@ export async function init() {
       if (!keysPressed[e.code]) {
         keysPressed[e.code] = true;
         handleKeyPress();
+      }
+
+      // Debug flash testing
+      if (e.code === 'KeyT') { // Test flashes with T key
+        console.log('🧪 Testing all flashes and trail clearing...');
+        paddleFlashTimes[0] = 1.0; // Left paddle
+        paddleFlashTimes[1] = 1.0; // Right paddle
+        borderFlashTimes[0] = 1.5; // Left border
+        borderFlashTimes[1] = 1.5; // Right border
+        borderFlashTimes[2] = 1.5; // Top border
+        borderFlashTimes[3] = 1.5; // Bottom border
+        triggerScoreFlash(0); // Test score flash
+        clearBallTrail(); // Test trail clearing
       }
     });
 
@@ -862,13 +936,13 @@ export async function init() {
       const myPaddle = gameState.paddles[myPlayerId];
       if (!myPaddle) return;
 
-      const moveSpeed = 25; // Enhanced mobile movement speed
+      const moveSpeed = PADSPEED * 280; // Use PADSPEED constant for mobile
       let newY = myPaddle.y;
 
       if (mobileControlDirection === 'up') {
-        newY = Math.max(0, myPaddle.y - moveSpeed);
-      } else if (mobileControlDirection === 'down') {
         newY = Math.min(400 - 100, myPaddle.y + moveSpeed);
+      } else if (mobileControlDirection === 'down') {
+        newY = Math.max(0, myPaddle.y - moveSpeed);
       }
 
       if (newY !== myPaddle.y) {
@@ -1070,6 +1144,7 @@ export async function init() {
       paddle1 = null;
       paddle2 = null;
       ball = null;
+      ballTrail = null;
 
       tableMat = null;
       borderMats = [];
