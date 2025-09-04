@@ -273,23 +273,19 @@ export async function init() {
     localGameState.ball.x += localGameState.ball.dx;
     localGameState.ball.y += localGameState.ball.dy;
 
-    // Calculate ball radius in 2D coordinates to match visual representation
-    // 3D ball radius (0.12) mapped to 2D coordinate system
-    const ballRadius = 9; // Calculated from 3D to 2D mapping
-
     if (localGameState.ball.y <= 0 || localGameState.ball.y >= GAME_CONFIG.CANVAS_HEIGHT) {
       localGameState.ball.dy = -localGameState.ball.dy;
       borderFlashTimes[localGameState.ball.y <= 0 ? 3 : 2] = 1.5; // Flash correct border for 3D view
     }
 
-    // Ball collision with paddles - account for ball radius for precise visual collision
+    // Ball collision with paddles
     const ball = localGameState.ball;
     const paddle1 = localGameState.paddles[1];
     const paddle2 = localGameState.paddles[2];
 
-    // Left paddle collision - ball's left edge touches paddle's right edge
-    if (ball.x - ballRadius <= paddle1.x + paddle1.width &&
-        ball.x + ballRadius >= paddle1.x &&
+    // Left paddle collision - more precise
+    if (ball.x <= paddle1.x + paddle1.width &&
+        ball.x >= paddle1.x &&
         ball.y >= paddle1.y &&
         ball.y <= paddle1.y + paddle1.height &&
         ball.dx < 0) {
@@ -300,9 +296,9 @@ export async function init() {
       paddleFlashTimes[0] = 1.0;
     }
 
-    // Right paddle collision - ball's right edge touches paddle's left edge
-    if (ball.x + ballRadius >= paddle2.x &&
-        ball.x - ballRadius <= paddle2.x + paddle2.width &&
+    // Right paddle collision - more precise
+    if (ball.x >= paddle2.x &&
+        ball.x <= paddle2.x + paddle2.width &&
         ball.y >= paddle2.y &&
         ball.y <= paddle2.y + paddle2.height &&
         ball.dx > 0) {
