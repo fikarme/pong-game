@@ -26,11 +26,11 @@ function setupHeaderButtons() {
     if (confirm('Are you sure you want to logout?')) {
       // Clear auth token and redirect to landing
       localStorage.removeItem('authToken');
-      
+
       // Disconnect WebSocket
       const wsManager = WebSocketManager.getInstance();
       wsManager.disconnect();
-      
+
       // Navigate to landing page
       router.navigate('landing');
       notify('Logged out successfully', 'green');
@@ -49,7 +49,7 @@ function setupHeaderButtons() {
       const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.USER.ME), {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         // Set viewing user to self and navigate
@@ -72,6 +72,10 @@ export async function init() {
     console.log('Home page already initialized, skipping...');
     return;
   }
+
+  // Disable scrolling
+  document.body.style.overflow = 'hidden';
+  document.documentElement.style.overflow = 'hidden';
 
   const authToken = localStorage.getItem('authToken');
   const profileContainer = document.getElementById('profile-container');
@@ -111,21 +115,21 @@ export async function init() {
   }
 
   // Game Area component'ini olustur
-  
+
   try {
     // User profile verisini al
     const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.USER.ME), {
       method: 'GET',
       headers: {'Authorization': `Bearer ${authToken}`}
     });
-    
+
     if (!response.ok) {
       throw new Error('Failed to fetch user profile');
     }
-    
+
     const apiResponse = await response.json();
     const user: UserProfile = apiResponse.user || apiResponse;
-    
+
     // Create components and store them globally
     currentProfileComponent = new ProfileComponent(user);
     currentGameAreaComponent = new GameAreaComponent();
@@ -136,18 +140,18 @@ export async function init() {
     console.log(`Connecting to WebSocket...:${authToken}`);
     const wsManager = WebSocketManager.getInstance();
     const onlineUsersService = OnlineUsersService.getInstance();
-    
+
     // Initialize OnlineUsersService when WebSocket connects
     wsManager.on('connected', () => {
       onlineUsersService.initialize();
     });
-    
+
     wsManager.connect(authToken ?? '');
 
     // Create and store chat service globally
     if (!currentChatService) {
       currentChatService = new ChatService();
-      
+
       // yeni mesaji notify ile bildir
       currentChatService.onNewMessage((message) => {
         console.log('New chat message:', message);
@@ -186,13 +190,13 @@ export async function init() {
 
     isInitialized = true;
     console.log('Home page loaded successfully');
-    
+
   } catch (error) {
     console.log('Error loading user data:', error);
-    
+
     // Reset initialization flag on error
     isInitialized = false;
-    
+
     // Token geçersizse temizle ve landing'e yönlendir
     AuthGuard.logout();
     notify('Session expired. Please login again.', 'red');
@@ -202,29 +206,33 @@ export async function init() {
 
 function cleanup() {
   console.log('🧹 Cleaning up home page components...');
-  
+
+  // Re-enable scrolling
+  document.body.style.overflow = '';
+  document.documentElement.style.overflow = '';
+
   // Clear containers
   const profileContainer = document.getElementById('profile-container');
   const gameAreaContainer = document.getElementById('game-area-container');
-  
+
   if (profileContainer) {
     while (profileContainer.firstChild) {
       profileContainer.removeChild(profileContainer.firstChild);
     }
   }
-  
+
   if (gameAreaContainer) {
     while (gameAreaContainer.firstChild) {
       gameAreaContainer.removeChild(gameAreaContainer.firstChild);
     }
   }
-  
+
   // Reset component instances
   currentProfileComponent = null;
   currentGameAreaComponent = null;
   currentChatService = null;
   currentGameService = null;
-  
+
   isInitialized = false;
 }
 
